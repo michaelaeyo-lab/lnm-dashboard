@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
-    "start": "prisma db push && node .next/standalone/server.js",
+    "start": "prisma db push && next start -H 0.0.0.0 -p ${PORT:-3000}",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push"
