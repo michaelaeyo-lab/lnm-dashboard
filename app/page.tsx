@@ -1,4 +1,4 @@
-import { prisma } from "./lib/db";
+import { getPrisma } from "./lib/db";
 import { phases as fallbackPhases, TaskStatus } from "./data";
 
 function getStatusColor(status: string) {
@@ -47,7 +47,7 @@ function ProgressBar({ tasks }: { tasks: { status: string }[] }) {
 
 async function getPhases() {
   try {
-    const dbPhases = await prisma.phase.findMany({
+    const dbPhases = await getPrisma().phase.findMany({
       include: { tasks: { orderBy: { sortOrder: "asc" } } },
       orderBy: { sortOrder: "asc" },
     });
