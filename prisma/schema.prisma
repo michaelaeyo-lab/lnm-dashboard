@@ -55,13 +55,14 @@ model Phase {
 }
 
 model Task {
-  id        String @id @default(cuid())
-  phaseId   String
-  title     String
-  status    String @default("pending") // "done" | "in-progress" | "pending" | "blocked"
-  blockedBy String?
-  sortOrder Int    @default(0)
-  phase     Phase  @relation(fields: [phaseId], references: [id])
+  id         String  @id @default(cuid())
+  phaseId    String
+  title      String
+  status     String  @default("pending") // "done" | "in-progress" | "pending" | "blocked"
+  assignedTo String? // "Michael" | "Sardar" | null
+  blockedBy  String?
+  sortOrder  Int     @default(0)
+  phase      Phase   @relation(fields: [phaseId], references: [id])
 
   @@index([phaseId])
 }
