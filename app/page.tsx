@@ -1,24 +1,27 @@
-import { phases, TaskStatus } from "./data";
+import { prisma } from "./lib/db";
+import { phases as fallbackPhases, TaskStatus } from "./data";
 
-function getStatusColor(status: TaskStatus) {
+function getStatusColor(status: string) {
   switch (status) {
     case "done": return "bg-emerald-500";
     case "in-progress": return "bg-amber-500";
     case "pending": return "bg-zinc-700";
     case "blocked": return "bg-red-500/70";
+    default: return "bg-zinc-700";
   }
 }
 
-function getStatusLabel(status: TaskStatus) {
+function getStatusLabel(status: string) {
   switch (status) {
     case "done": return "Done";
     case "in-progress": return "In Progress";
     case "pending": return "Pending";
     case "blocked": return "Blocked";
+    default: return status;
   }
 }
 
-function ProgressBar({ tasks }: { tasks: { status: TaskStatus }[] }) {
+function ProgressBar({ tasks }: { tasks: { status: string }[] }) {
   const total = tasks.length;
   const done = tasks.filter(t => t.status === "done").length;
   const inProgress = tasks.filter(t => t.status === "in-progress").length;
@@ -42,7 +45,28 @@ function ProgressBar({ tasks }: { tasks: { status: TaskStatus }[] }) {
   );
 }
 
-export default function Home() {
+async function getPhases() {
+  try {
+    const dbPhases = await prisma.phase.findMany({
+      include: { tasks: { orderBy: { sortOrder: "asc" } } },
+      orderBy: { sortOrder: "asc" },
+    });
+    if (dbPhases.length > 0) return dbPhases;
+  } catch {
+    // DB not available — fall back to static data
+  }
+  return fallbackPhases.map(p => ({
+    ...p,
+    slug: p.id,
+    sortOrder: 0,
+    tasks: p.tasks.map(t => ({ ...t, phaseId: p.id, sortOrder: 0, blockedBy: t.blockedBy ?? null })),
+  }));
+}
+
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const phases = await getPhases();
   const totalTasks = phases.reduce((sum, p) => sum + p.tasks.length, 0);
   const doneTasks = phases.reduce((sum, p) => sum + p.tasks.filter(t => t.status === "done").length, 0);
   const inProgressTasks = phases.reduce((sum, p) => sum + p.tasks.filter(t => t.status === "in-progress").length, 0);
