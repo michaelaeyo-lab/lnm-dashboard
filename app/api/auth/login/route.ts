@@ -37,6 +37,9 @@ export async function POST(request: Request) {
     return Response.json({ user: sessionUser });
   } catch (err) {
     console.error("[/api/auth/login] Error:", err);
-    return Response.json({ error: "Login failed" }, { status: 500 });
+    return Response.json(
+      { error: "Login failed", details: String(err) },
+      { status: 500 }
+    );
   }
 }
