@@ -3,7 +3,9 @@ import { retrieveForAgent } from "@/app/lib/retrieval";
 import { getPrisma } from "@/app/lib/db";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+}
 
 export async function POST(request: Request) {
   const user = await getSession();
@@ -54,7 +56,7 @@ Guidelines:
   ];
 
   // Stream response via SSE
-  const stream = await openai.chat.completions.create({
+  const stream = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     messages,
     stream: true,
