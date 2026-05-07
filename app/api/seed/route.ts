@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "../../lib/db";
+import { hashPassword } from "../../lib/auth";
 
 const phases = [
   {
@@ -51,14 +52,13 @@ const phases = [
     description: "Split consolidated files into 200-1000 token retrievable units with metadata",
     sortOrder: 3,
     tasks: [
-      { title: "Design chunking strategy per content type", status: "pending", sortOrder: 0 },
-      { title: "Build chunking pipeline script", status: "pending", sortOrder: 1 },
-      { title: "Define metadata schema", status: "pending", sortOrder: 2 },
-      { title: "Process website articles into chunks", status: "pending", sortOrder: 3 },
-      { title: "Process video transcripts into chunks", status: "pending", sortOrder: 4 },
-      { title: "Process GPT prompts + strategy blueprints", status: "pending", sortOrder: 5 },
-      { title: "Deduplicate chunks across categories", status: "pending", sortOrder: 6 },
-      { title: "Validate chunk quality (spot-check 10%)", status: "pending", sortOrder: 7 },
+      { title: "Design chunking strategy per content type", status: "done", sortOrder: 0 },
+      { title: "Build chunking pipeline script", status: "done", sortOrder: 1 },
+      { title: "Define metadata schema", status: "done", sortOrder: 2 },
+      { title: "Process website articles into chunks", status: "done", sortOrder: 3 },
+      { title: "Process video transcripts into chunks", status: "done", sortOrder: 4 },
+      { title: "Process GPT prompts + strategy blueprints", status: "done", sortOrder: 5 },
+      { title: "Validate chunk quality", status: "done", sortOrder: 6 },
     ],
   },
   {
@@ -67,28 +67,26 @@ const phases = [
     description: "Store embeddings, build retrieval pipeline for agent knowledge",
     sortOrder: 4,
     tasks: [
-      { title: "Choose vector DB (Supabase pgvector vs ChromaDB vs Qdrant)", status: "pending", sortOrder: 0 },
-      { title: "Set up database with categorized collections", status: "pending", sortOrder: 1 },
-      { title: "Generate embeddings for all chunks", status: "pending", sortOrder: 2 },
-      { title: "Build retrieval function (query → top-K chunks)", status: "pending", sortOrder: 3 },
-      { title: "Build multi-stage generation pipeline", status: "pending", sortOrder: 4 },
-      { title: "Add content rules injection layer", status: "pending", sortOrder: 5 },
-      { title: "Test retrieval accuracy (20 test queries)", status: "pending", sortOrder: 6 },
-      { title: "Deploy with shared access", status: "pending", sortOrder: 7 },
+      { title: "Choose vector DB (Railway Postgres + pgvector)", status: "done", sortOrder: 0 },
+      { title: "Update Prisma schema with vector fields", status: "done", sortOrder: 1 },
+      { title: "Generate embeddings for all 14,130 chunks", status: "done", sortOrder: 2 },
+      { title: "Build hybrid retrieval function", status: "done", sortOrder: 3 },
+      { title: "Build search API endpoint", status: "done", sortOrder: 4 },
+      { title: "Test retrieval accuracy", status: "done", sortOrder: 5 },
     ],
   },
   {
     slug: "dashboard",
     title: "Phase 4: Dashboard & Auth",
-    description: "Web interface for tracking progress and interacting with agents",
+    description: "Web interface with auth, knowledge browser, RAG chat, generation history",
     sortOrder: 5,
     tasks: [
       { title: "Deploy progress tracker to Railway", status: "done", assignedTo: "Michael", sortOrder: 0 },
-      { title: "Add dashboard editing (CRUD)", status: "in-progress", assignedTo: "Michael", sortOrder: 1 },
-      { title: "Knowledge browser UI", status: "pending", sortOrder: 2 },
-      { title: "Agent interaction interface", status: "pending", sortOrder: 3 },
-      { title: "Auth (Michael + Sardar logins)", status: "pending", sortOrder: 4 },
-      { title: "Generation history + export", status: "pending", sortOrder: 5 },
+      { title: "Add dashboard editing (CRUD)", status: "done", assignedTo: "Michael", sortOrder: 1 },
+      { title: "JWT auth (Michael + Sardar logins)", status: "done", assignedTo: "Michael", sortOrder: 2 },
+      { title: "Knowledge browser UI", status: "done", assignedTo: "Michael", sortOrder: 3 },
+      { title: "RAG chat interface (streaming)", status: "done", assignedTo: "Michael", sortOrder: 4 },
+      { title: "Generation history", status: "done", assignedTo: "Michael", sortOrder: 5 },
     ],
   },
   {
@@ -129,7 +127,7 @@ const phases = [
     tasks: [
       { title: "Add new client projects as case studies", status: "pending", sortOrder: 0 },
       { title: "Build additional specialized tools", status: "pending", sortOrder: 1 },
-      { title: "Benchmark outputs vs SearchAtlas/competitors", status: "pending", sortOrder: 2 },
+      { title: "Benchmark outputs vs competitors", status: "pending", sortOrder: 2 },
       { title: "Scale to team use (role-based access)", status: "pending", sortOrder: 3 },
     ],
   },
@@ -154,14 +152,32 @@ export async function POST() {
       results.push(`${phase.title}: ${tasks.length} tasks`);
     }
 
+    // Hash passwords
+    const michaelHash = await hashPassword(
+      process.env.MICHAEL_PASSWORD || "lnm-michael-2026"
+    );
+    const sardarHash = await hashPassword(
+      process.env.SARDAR_PASSWORD || "lnm-sardar-2026"
+    );
+
     await prisma.user.deleteMany();
     await prisma.user.createMany({
       data: [
-        { email: "michael@latenightmillionaires.com", name: "Michael", role: "admin" },
-        { email: "786hopefrbest@gmail.com", name: "Sardar", role: "member" },
+        {
+          email: "michael@latenightmillionaires.com",
+          name: "Michael",
+          role: "admin",
+          passwordHash: michaelHash,
+        },
+        {
+          email: "786hopefrbest@gmail.com",
+          name: "Sardar",
+          role: "member",
+          passwordHash: sardarHash,
+        },
       ],
     });
-    results.push("Users: Michael (admin), Sardar (member)");
+    results.push("Users: Michael (admin), Sardar (member) — with password hashes");
 
     return NextResponse.json({ success: true, seeded: results });
   } catch (error) {

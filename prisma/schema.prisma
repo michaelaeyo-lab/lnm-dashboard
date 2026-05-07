@@ -8,26 +8,34 @@ datasource db {
 
 // --- Auth ---
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  role      String   @default("member") // "admin" | "member"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String?
+  passwordHash String?
+  role         String       @default("member") // "admin" | "member"
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  generations  Generation[]
 }
 
 // --- Knowledge Base ---
 model KnowledgeChunk {
-  id         String   @id @default(cuid())
-  category   String   // e.g. "technical-seo", "python-seo"
-  title      String
-  content    String
-  sourceFile String?
-  sourceUrl  String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  id          String                          @id // deterministic IDs from chunk JSON
+  category    String
+  title       String
+  content     String
+  sourceFile  String?
+  sourceUrl   String?
+  sourceType  String?                         // web, youtube, gpt-prompt, strategy-snapshot
+  contentType String?                         // reference, strategic, tool, blueprint
+  tokenCount  Int?
+  metadata    Json?                           // { headingPath, chunkIndex, totalChunks }
+  embedding   Unsupported("vector(1536)")?    // pgvector
+  createdAt   DateTime                        @default(now())
 
   @@index([category])
+  @@index([sourceType])
+  @@index([contentType])
 }
 
 // --- Generation History ---
@@ -39,6 +47,7 @@ model Generation {
   output      String
   metadata    Json?
   createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([agentType])

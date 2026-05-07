@@ -18,3 +18,29 @@ export interface PhaseData {
   sortOrder: number;
   tasks: TaskData[];
 }
+
+// --- Auth ---
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+}
+
+// --- Chat ---
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface GenerationData {
+  id: string;
+  userId: string;
+  agentType: string;
+  inputPrompt: string;
+  output: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
