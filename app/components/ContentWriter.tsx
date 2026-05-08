@@ -239,23 +239,26 @@ export function ContentWriter() {
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between mt-3 pt-3 border-t border-zinc-800">
+      <div className="flex justify-between items-center mt-3 pt-3 border-t border-zinc-800">
         <button
           onClick={() => setActiveIndex(Math.max(0, activeIndex - 1))}
           disabled={activeIndex === 0}
-          className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-200 disabled:text-zinc-600"
+          title={activeIndex === 0 ? "Already on first section" : "Go to previous section"}
+          className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-200 disabled:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Previous
+          &larr; Previous
         </button>
         <span className="text-xs text-zinc-500">
-          {activeIndex + 1} / {activeSession.sections.length}
+          Section {activeIndex + 1} of {activeSession.sections.length}
+          {activeSession.sections.length === 1 && " — add more headings for multiple sections"}
         </span>
         <button
           onClick={() => setActiveIndex(Math.min(activeSession.sections.length - 1, activeIndex + 1))}
           disabled={activeIndex === activeSession.sections.length - 1}
-          className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-200 disabled:text-zinc-600"
+          title={activeIndex === activeSession.sections.length - 1 ? "Already on last section" : "Go to next section"}
+          className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-200 disabled:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Next Section
+          Next Section &rarr;
         </button>
       </div>
     </div>
