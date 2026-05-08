@@ -86,30 +86,50 @@ export function BriefImport({
   return (
     <div className="space-y-4 max-w-2xl">
       <div>
-        <label className="block text-xs text-zinc-400 mb-1">Paste your brief (markdown, numbered list, or plain text)</label>
+        <label className="block text-xs text-zinc-400 mb-1">
+          Paste your heading outline (one heading per line)
+        </label>
+        <p className="text-xs text-zinc-600 mb-2">
+          Accepts: markdown headings (# / ##), numbered lists (1. / 2.), or plain text lines.
+          Each line becomes a section to generate content for.
+        </p>
         <textarea
           value={rawText}
           onChange={(e) => { setRawText(e.target.value); setParsed(null); }}
-          placeholder={"# Main Heading\n## What is this topic?\n## Why does it matter?\n### Key benefits\n## How to get started"}
+          placeholder={"# 15 Proven Tips for Managing Moving Anxiety and Stress\n## Why Moving Causes So Much Stress\n## Planning and Organization Strategies\n## Decluttering Before the Move\n## Maintaining a Healthy Lifestyle During Relocation\n## The Role of Social Support\n## Relaxation Techniques That Work\n## When to Seek Professional Help"}
           rows={8}
           className={`${inputCls} resize-y font-mono`}
         />
       </div>
 
-      {!parsed && (
-        <button
-          onClick={handleParse}
-          disabled={!rawText.trim()}
-          className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-zinc-200 text-sm rounded-lg transition-colors"
-        >
-          Parse Headings
-        </button>
+      {!parsed && rawText.trim() && (
+        <div>
+          {/* Warning if text looks like a paragraph instead of headings */}
+          {rawText.trim().split("\n").filter(Boolean).length <= 2 && rawText.trim().length > 200 && (
+            <p className="text-xs text-yellow-400 mb-2">
+              This looks like body text, not a heading outline. Import Brief expects one heading per line
+              (e.g., &quot;## Why Moving Causes Stress&quot;). Use Quick Form if you want to type headings manually.
+            </p>
+          )}
+          <button
+            onClick={handleParse}
+            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm rounded-lg transition-colors"
+          >
+            Parse Headings
+          </button>
+        </div>
       )}
 
       {parsed && (
         <>
           <div className="bg-zinc-800/50 rounded-lg p-3">
-            <p className="text-xs text-zinc-400 mb-2">Parsed {parsed.length} headings:</p>
+            {parsed.some((h) => h.text.length > 100) && (
+              <p className="text-xs text-yellow-400 mb-2">
+                Some headings look very long — you may have pasted body text instead of a heading outline.
+                Go back and paste one heading per line (e.g., &quot;## Section Title&quot;).
+              </p>
+            )}
+            <p className="text-xs text-zinc-400 mb-2">Parsed {parsed.length} heading{parsed.length !== 1 ? "s" : ""}:</p>
             <div className="space-y-1">
               {parsed.map((h, i) => (
                 <div key={i} className="text-sm text-zinc-300" style={{ paddingLeft: `${(h.level - 1) * 16}px` }}>
