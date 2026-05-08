@@ -26,6 +26,7 @@ export function ContentWriter() {
   const [inputMode, setInputMode] = useState<InputMode>("form");
   const [creating, setCreating] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -53,6 +54,7 @@ export function ContentWriter() {
 
   async function createSession(brief: ContentBrief) {
     setCreating(true);
+    setError(null);
     try {
       const res = await fetch("/api/content/sessions", {
         method: "POST",
@@ -65,8 +67,13 @@ export function ContentWriter() {
         setActiveIndex(0);
         setShowNew(false);
         loadSessions();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Failed to create session (${res.status})`);
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error — could not reach server");
+    }
     finally { setCreating(false); }
   }
 
@@ -165,6 +172,12 @@ export function ContentWriter() {
             Import Brief
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 px-4 py-3 bg-red-900/30 border border-red-800 rounded-lg text-sm text-red-300">
+            {error}
+          </div>
+        )}
 
         {inputMode === "form" ? (
           <BriefForm onSubmit={createSession} loading={creating} />
