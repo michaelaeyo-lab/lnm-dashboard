@@ -46,6 +46,7 @@ const AGENT_POOLS: Record<string, string[] | null> = {
     "17-strategy-blueprints",
     "13-case-studies",
   ],
+  "writing-rules": ["18-content-writing-rules"],
   all: null, // search everything
 };
 

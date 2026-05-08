@@ -15,7 +15,8 @@ model User {
   role         String       @default("member") // "admin" | "member"
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
-  generations  Generation[]
+  generations     Generation[]
+  contentSessions ContentSession[]
 }
 
 // --- Knowledge Base ---
@@ -51,6 +52,41 @@ model Generation {
 
   @@index([userId])
   @@index([agentType])
+}
+
+// --- Content Writing ---
+model ContentSession {
+  id          String           @id @default(cuid())
+  userId      String
+  brief       Json             // Full ContentBrief JSON
+  niche       String           // "legal", "plumber", "general", etc.
+  pageType    String           // "service", "location", "blog", "landing"
+  title       String           // Display title derived from brief
+  status      String           @default("draft") // draft | in_progress | completed
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id])
+  sections    ContentSection[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ContentSection {
+  id           String         @id @default(cuid())
+  sessionId    String
+  headingLevel Int            // 1, 2, 3, 4
+  headingText  String
+  intent       String?        // What this section should accomplish
+  content      String?        // Generated content (null until generated)
+  status       String         @default("pending") // pending | generating | completed | refined
+  sortOrder    Int
+  metadata     Json?          // { chunksUsed, topScore, rulesApplied, wordCount }
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  session      ContentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
 }
 
 // --- Project/Phase Tracking ---
