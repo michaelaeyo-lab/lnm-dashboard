@@ -35,11 +35,17 @@ export function BriefForm({
   const [headings, setHeadings] = useState<BriefHeading[]>([
     { level: 1, text: "" },
   ]);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/content/niches")
-      .then((r) => r.json())
-      .then((data) => setNiches(data))
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load niches");
+        return r.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setNiches(data);
+      })
       .catch(() => {});
   }, []);
 
@@ -60,7 +66,17 @@ export function BriefForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!topic.trim() || headings.some((h) => !h.text.trim())) return;
+    setValidationError(null);
+
+    if (!topic.trim()) {
+      setValidationError("Topic / Main Keyword is required.");
+      return;
+    }
+    const emptyIdx = headings.findIndex((h) => !h.text.trim());
+    if (emptyIdx !== -1) {
+      setValidationError(`Heading ${emptyIdx + 1} text is empty. All headings need text.`);
+      return;
+    }
 
     const brief: ContentBrief = {
       pageType: pageType as ContentBrief["pageType"],
@@ -104,7 +120,7 @@ export function BriefForm({
 
       <div>
         <label className={labelCls}>Topic / Main Keyword *</label>
-        <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g., Car Accident Lawyer, Plumbing Services" className={inputCls} required />
+        <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g., Car Accident Lawyer, Plumbing Services" className={inputCls} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -145,7 +161,6 @@ export function BriefForm({
                 onChange={(e) => updateHeading(i, "text", e.target.value)}
                 placeholder={i === 0 ? "Main heading (H1)..." : "Section heading..."}
                 className={`flex-1 ${inputCls}`}
-                required
               />
               <input
                 type="text"
@@ -170,9 +185,15 @@ export function BriefForm({
         <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="Any extra writing instructions..." rows={2} className={`${inputCls} resize-none`} />
       </div>
 
+      {validationError && (
+        <div className="px-3 py-2 bg-yellow-900/30 border border-yellow-700 rounded-lg text-sm text-yellow-300">
+          {validationError}
+        </div>
+      )}
+
       <button
         type="submit"
-        disabled={loading || !topic.trim() || headings.some((h) => !h.text.trim())}
+        disabled={loading}
         className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white text-sm rounded-lg transition-colors"
       >
         {loading ? "Creating..." : "Create Content Session"}
