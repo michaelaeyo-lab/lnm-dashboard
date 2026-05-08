@@ -123,9 +123,6 @@ Guidelines:
     });
   } catch (err) {
     console.error("[/api/chat] Error:", err);
-    return Response.json(
-      { error: "Chat failed", details: String(err) },
-      { status: 500 }
-    );
+    return Response.json({ error: "Chat failed" }, { status: 500 });
   }
 }
