@@ -44,11 +44,14 @@ export function BriefGenerator() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) {
-          setNiches(
-            Array.isArray(data)
-              ? data
-              : Object.entries(data).map(([id, label]) => ({ id, label: String(label) }))
-          );
+          const list: { id: string; label: string }[] = Array.isArray(data)
+            ? data.map((n: { name?: string; label?: string; id?: string }) => ({
+                id: n.name || n.id || "",
+                label: n.label || n.name || "",
+              }))
+            : Object.entries(data).map(([id, label]) => ({ id, label: String(label) }));
+          // Filter out "general" — already hardcoded in the select
+          setNiches(list.filter((n) => n.id !== "general"));
         }
       })
       .catch(() => {});

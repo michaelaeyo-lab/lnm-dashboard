@@ -24,6 +24,58 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 }
 
+/**
+ * Safely parse JSON from LLM output. Handles truncated responses by
+ * attempting to repair common issues (missing closing brackets/braces).
+ */
+function safeParseJSON<T>(text: string): T {
+  // First try direct parse
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // ignore, try repairs
+  }
+
+  // Strip markdown code fences if present
+  let cleaned = text.replace(/^```json?\s*/i, "").replace(/```\s*$/, "").trim();
+
+  // Try again
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    // ignore
+  }
+
+  // Attempt to repair truncated JSON by closing open brackets/braces
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of cleaned) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") openBraces++;
+    if (ch === "}") openBraces--;
+    if (ch === "[") openBrackets++;
+    if (ch === "]") openBrackets--;
+  }
+
+  // If we're inside a string, close it
+  if (inString) cleaned += '"';
+
+  // Remove trailing comma before closing
+  cleaned = cleaned.replace(/,\s*$/, "");
+
+  // Close open structures
+  for (let i = 0; i < openBrackets; i++) cleaned += "]";
+  for (let i = 0; i < openBraces; i++) cleaned += "}";
+
+  return JSON.parse(cleaned) as T;
+}
+
 // --- Types ---
 
 export interface BriefGenParams {
@@ -201,6 +253,7 @@ async function stepContextualVectors(
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -219,7 +272,7 @@ Return JSON: { "contextualVectors": string[], "entityMap": [{ "entity": string, 
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  const parsed = JSON.parse(content) as {
+  const parsed = safeParseJSON(content) as {
     contextualVectors?: string[];
     entityMap?: EntityMapping[];
   };
@@ -269,6 +322,7 @@ async function stepHierarchyConstruction(
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -295,7 +349,7 @@ Return JSON: { "headings": [{ "level": 1|2|3|4, "text": string }] }`,
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  const parsed = JSON.parse(content) as {
+  const parsed = safeParseJSON(content) as {
     headings?: Array<{ level: number; text: string }>;
   };
 
@@ -324,18 +378,21 @@ async function stepStructureInstructions(
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
+    max_tokens: 8192,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
         content: `You are a semantic SEO brief writer. For each heading, generate:
-1. structureInstructions: Detailed instructions on what to write and how (format, tone, content type — e.g., "Explicit definition using signifier + qualifier", "List intro + List items + List outro", "Direct answer + expansion of evidence")
-2. ruleCodes: Which writing rule codes apply (e.g., "FS" for featured snippet, "PAA" for people also ask, "NER" for named entity recognition, "TF-IDF" for term frequency)
-3. intent: What this section should accomplish for the reader
+1. structureInstructions: A concise instruction (1-2 sentences) on what to write and how (format, tone, content type)
+2. ruleCodes: Which writing rule codes apply (e.g., "FS", "PAA", "NER", "TF-IDF")
+3. intent: One sentence on what this section should accomplish
 4. wordCountTarget: Suggested word count (50-300 per section)
 
-Reference these content writing rules when assigning structure instructions:
-${coreRules.slice(0, 2000)}
+Keep structureInstructions SHORT — max 2 sentences. Do not write paragraphs.
+
+Reference these content writing rules when assigning rule codes:
+${coreRules.slice(0, 1500)}
 
 Return JSON: { "headings": [{ "level": number, "text": string, "structureInstructions": string, "ruleCodes": string[], "intent": string, "wordCountTarget": number }] }`,
       },
@@ -347,7 +404,7 @@ Return JSON: { "headings": [{ "level": number, "text": string, "structureInstruc
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  const parsed = JSON.parse(content) as {
+  const parsed = safeParseJSON(content) as {
     headings?: Array<{
       level: number;
       text: string;
@@ -383,6 +440,7 @@ async function stepConnectionMapping(
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -399,7 +457,7 @@ Return JSON: { "connections": [{ "fromHeading": string, "toPage": string, "ancho
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  const parsed = JSON.parse(content) as {
+  const parsed = safeParseJSON(content) as {
     connections?: ConnectionEntry[];
   };
 
@@ -429,6 +487,7 @@ async function stepQueryMapping(
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.2,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -439,13 +498,13 @@ Return JSON: { "mappings": [{ "headingIndex": number, "queries": [{ "query": str
       },
       {
         role: "user",
-        content: `Headings:\n${headings.map((h, i) => `${i}. ${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\nKeywords:\n${allKeywords.map((k) => `${k.keyword} (${k.volume}/mo${k.intent ? `, ${k.intent}` : ""})`).join("\n")}`,
+        content: `Headings:\n${headings.map((h, i) => `${i}. ${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\nKeywords:\n${allKeywords.slice(0, 30).map((k) => `${k.keyword} (${k.volume}/mo${k.intent ? `, ${k.intent}` : ""})`).join("\n")}`,
       },
     ],
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  const parsed = JSON.parse(content) as {
+  const parsed = safeParseJSON(content) as {
     mappings?: Array<{
       headingIndex: number;
       queries: QueryEntry[];
