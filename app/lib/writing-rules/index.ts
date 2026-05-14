@@ -65,10 +65,51 @@ export function nicheExists(niche: string): boolean {
 }
 
 /**
+ * Hard output constraints that override default GPT behavior.
+ * These match the manual prompting approach that produces
+ * entity-driven, zero-fluff, Koray-methodology content.
+ */
+const OUTPUT_CONSTRAINTS = `## MANDATORY OUTPUT CONSTRAINTS
+
+You MUST follow these output rules. Violations make the content unusable.
+
+### Format Rules
+- Write in PARAGRAPH FORMAT ONLY. No bullet points. No numbered lists. No dashes.
+- NEVER use markdown bold (**text**). NEVER use markdown italic (*text*).
+- NEVER use markdown headings (#) in your output. Output body text only.
+- Use ordered/unordered lists ONLY when the heading explicitly requests a list structure.
+- Do not use colons to introduce categories. Integrate information into sentence flow.
+
+### Language Rules
+- NEVER use modal verbs: will, should, need to, have to, must, can, could, would, may, might.
+- NEVER use everyday language or conversational tone.
+- NEVER use analogies or metaphors.
+- NEVER give opinions. Every statement is a factual declaration.
+- NEVER use filler phrases: "it is important to note", "it is worth mentioning", "in today's world", "when it comes to".
+- NEVER start sentences with "There are", "It is", "This is" unless defining something.
+- NEVER use promotional language in informational content.
+
+### Structure Rules
+- Prefer 40-word sentences for snippet optimization.
+- Use short sentences. If a sentence exceeds 30 words, split it.
+- Use factual sentence structures: "X does Y" not "X is known for doing Y".
+- First sentence under any heading is the direct answer. Evidence follows.
+- Place conditions after the main clause: "X happens, if Y occurs" not "If Y occurs, X happens".
+- Use consistent terminology. Do not alternate between synonyms for the same concept.
+- Every word must carry contextual relevance. Delete words that add nothing to meaning.
+- Use entity-driven writing: include entities, attributes, and their values.
+- Include specific numbers, percentages, data points. Experts are specific.
+
+### Two-Pass Rule
+Before writing, internally process ALL 56 semantic writing rules. Then write content that implements every applicable rule. This is not optional.`;
+
+/**
  * Build the complete writing system prompt by composing:
- * 1. Core semantic rules (universal)
- * 2. Niche-specific rules (if any)
- * 3. Generation context (page info, previous sections)
+ * 1. Role + hard output constraints
+ * 2. Page context
+ * 3. Core semantic rules (56 rules, universal)
+ * 4. Niche-specific rules (if any)
+ * 5. Previously written sections (for continuity)
  */
 export function buildWritingSystemPrompt(params: {
   niche: string;
@@ -84,7 +125,9 @@ export function buildWritingSystemPrompt(params: {
   const nicheRules = getNicheRules(params.niche);
 
   const parts: string[] = [
-    `You are a semantic content writer. You produce high-quality, SEO-optimized content by strictly following the writing rules provided below.`,
+    `You are a semantic content writer trained on Koray Tugberk Gubur's methodology. You produce entity-driven, zero-fluff, factual content by strictly implementing ALL writing rules below. Every sentence must maximize information density per word. No exceptions.`,
+    ``,
+    OUTPUT_CONSTRAINTS,
     ``,
     `## Page Context`,
     `- Page type: ${params.pageType}`,
