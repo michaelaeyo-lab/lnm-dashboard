@@ -11,6 +11,7 @@ export type AuditAction =
   | "refine_content"
   | "search_knowledge"
   | "create_brief"
+  | "generate_brief"
   | "login"
   | "export";
 

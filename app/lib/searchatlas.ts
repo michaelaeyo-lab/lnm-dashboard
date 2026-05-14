@@ -230,14 +230,16 @@ function parseKeywordResponse(
       }))
     : [];
 
-  const paa: string[] = Array.isArray(results.paa || results.people_also_ask)
-    ? (results.paa || results.people_also_ask).map((q: unknown) =>
+  const rawPaa = results.paa || results.people_also_ask;
+  const paa: string[] = Array.isArray(rawPaa)
+    ? rawPaa.map((q: unknown) =>
         typeof q === "string" ? q : String((q as Record<string, unknown>).question || q)
       )
     : [];
 
-  const serpResults: SerpResult[] = Array.isArray(results.serp || results.serp_results)
-    ? (results.serp || results.serp_results).map(
+  const rawSerp = results.serp || results.serp_results;
+  const serpResults: SerpResult[] = Array.isArray(rawSerp)
+    ? rawSerp.map(
         (s: Record<string, unknown>, i: number) => ({
           position: toNumber(s.position, i + 1),
           url: String(s.url || s.link || ""),
@@ -247,8 +249,9 @@ function parseKeywordResponse(
       )
     : [];
 
-  const features: string[] = Array.isArray(results.serp_features)
-    ? results.serp_features.map((f: unknown) => String(f))
+  const rawFeatures = results.serp_features;
+  const features: string[] = Array.isArray(rawFeatures)
+    ? rawFeatures.map((f: unknown) => String(f))
     : [];
 
   const competitors: CompetitorAnalysis[] = serpResults.slice(0, 5).map((s) => ({
