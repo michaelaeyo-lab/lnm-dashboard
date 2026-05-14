@@ -1,6 +1,8 @@
 import { getSession } from "@/app/lib/session";
 import { getPrisma } from "@/app/lib/db";
 import { generateSection } from "@/app/lib/content-pipeline";
+import { rateLimit } from "@/app/lib/security";
+import { logOperation } from "@/app/lib/audit";
 import type { ContentBrief, ContentSectionData } from "@/app/lib/types";
 
 /**
@@ -13,6 +15,18 @@ export async function POST(request: Request) {
       return Response.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Rate limit: 20 requests/min per user for generation
+    const rl = rateLimit(`generate:${user.id}`, 20, 60_000);
+    if (!rl.allowed) {
+      return Response.json(
+        { error: "Generation rate limit exceeded. Please wait before generating again." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)) },
+        }
+      );
+    }
+
     const { sessionId, sectionId } = await request.json();
 
     if (!sessionId || !sectionId) {
@@ -21,6 +35,14 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Audit log
+    logOperation({
+      userId: user.id,
+      action: "generate_content",
+      resource: "/api/content/generate",
+      metadata: { sessionId, sectionId },
+    });
 
     const prisma = getPrisma();
 

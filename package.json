@@ -12,7 +12,10 @@
     "db:push": "prisma db push",
     "chunk:knowledge": "npx tsx scripts/chunk-knowledge.ts",
     "embed:chunks": "npx tsx scripts/embed-chunks.ts",
-    "verify:embeddings": "npx tsx scripts/verify-embeddings.ts"
+    "verify:embeddings": "npx tsx scripts/verify-embeddings.ts",
+    "db:backup": "npx tsx scripts/backup-db.ts",
+    "db:export": "npx tsx scripts/export-knowledge.ts",
+    "db:import": "npx tsx scripts/import-knowledge.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

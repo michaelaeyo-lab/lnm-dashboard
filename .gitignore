@@ -44,3 +44,6 @@ next-env.d.ts
 
 /app/generated/prisma
 .session/
+
+# chunk data (generated artifacts, already in DB)
+/data/chunks/

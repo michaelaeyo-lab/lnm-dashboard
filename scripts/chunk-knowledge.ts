@@ -87,6 +87,7 @@ const CATEGORIES = [
   "16-web-security",
   "17-strategy-blueprints",
   "18-content-writing-rules",
+  "19-brief-examples",
 ];
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -204,13 +205,17 @@ type ContentKind =
   | "youtube-transcript"
   | "gpt-prompt"
   | "blueprint-md"
-  | "snapshot-json";
+  | "snapshot-json"
+  | "brief-example";
 
 function detectContentKind(
   filename: string,
   category: string,
   indexEntry?: IndexEntry
 ): ContentKind {
+  // Brief examples (category 19)
+  if (category === "19-brief-examples") return "brief-example";
+
   // JSON snapshots
   if (filename.endsWith(".json")) return "snapshot-json";
 
@@ -819,6 +824,40 @@ function formatPageEntry(page: any): string {
   return parts.join("\n");
 }
 
+function chunkBriefExample(
+  content: string,
+  filename: string
+): Omit<Chunk, "id" | "category" | "chunkIndex" | "totalChunks">[] {
+  const cleaned = cleanContent(content);
+
+  // Extract title from first # heading (e.g. "Homepage — Content Brief")
+  const titleMatch = cleaned.match(/^#\s+(.+)/m);
+  const title = titleMatch ? titleMatch[1].trim() : filename.replace(/\.md$/, "");
+
+  const sections = splitByHeadings(cleaned);
+  const merged = mergeSmallChunks(sections);
+
+  const chunks: Omit<Chunk, "id" | "category" | "chunkIndex" | "totalChunks">[] = [];
+
+  for (const section of merged) {
+    const subChunks = enforceMaxTokens(section.text);
+    for (const text of subChunks) {
+      chunks.push({
+        title: section.heading || title,
+        content: text,
+        sourceFile: filename,
+        sourceUrl: "",
+        sourceType: "brief-example",
+        contentType: "example",
+        tokenCount: estimateTokens(text),
+        headingPath: section.headingPath.length > 0 ? section.headingPath : [title],
+      });
+    }
+  }
+
+  return chunks;
+}
+
 // ─── Main Pipeline ───────────────────────────────────────────────────────────
 
 function processFile(
@@ -850,6 +889,9 @@ function processFile(
       break;
     case "snapshot-json":
       rawChunks = chunkSnapshotJson(content, filename);
+      break;
+    case "brief-example":
+      rawChunks = chunkBriefExample(content, filename);
       break;
     default:
       rawChunks = chunkWebArticle(content, filename);

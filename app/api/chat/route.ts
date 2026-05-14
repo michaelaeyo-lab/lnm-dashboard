@@ -1,6 +1,8 @@
 import { getSession } from "@/app/lib/session";
 import { retrieveForAgent } from "@/app/lib/retrieval";
 import { getPrisma } from "@/app/lib/db";
+import { rateLimit, sanitizeInput } from "@/app/lib/security";
+import { logOperation } from "@/app/lib/audit";
 import OpenAI from "openai";
 
 function getOpenAI() {
@@ -14,14 +16,37 @@ export async function POST(request: Request) {
       return Response.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Rate limit: 10 requests/min per user (chat is expensive)
+    const rl = rateLimit(`chat:${user.id}`, 10, 60_000);
+    if (!rl.allowed) {
+      return Response.json(
+        { error: "Chat rate limit exceeded. Please wait before sending another message." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)) },
+        }
+      );
+    }
+
     const { message, agentPool = "all", history = [] } = await request.json();
 
     if (!message || typeof message !== "string") {
       return Response.json({ error: "Message is required" }, { status: 400 });
     }
 
+    // Sanitize user input
+    const sanitizedMessage = sanitizeInput(message);
+
+    // Audit log
+    logOperation({
+      userId: user.id,
+      action: "search_knowledge",
+      resource: "/api/chat",
+      metadata: { agentPool, messageLength: sanitizedMessage.length },
+    });
+
     // Retrieve relevant knowledge chunks
-    const chunks = await retrieveForAgent(agentPool, message, 10);
+    const chunks = await retrieveForAgent(agentPool, sanitizedMessage, 10);
 
     const contextBlock = chunks
       .map(
@@ -53,7 +78,7 @@ Guidelines:
         role: m.role as "user" | "assistant",
         content: m.content,
       })),
-      { role: "user", content: message },
+      { role: "user", content: sanitizedMessage },
     ];
 
     // Stream response via SSE
@@ -91,7 +116,7 @@ Guidelines:
               data: {
                 userId: user.id,
                 agentType: agentPool,
-                inputPrompt: message,
+                inputPrompt: sanitizedMessage,
                 output: fullResponse,
                 metadata: {
                   chunksUsed: chunks.length,

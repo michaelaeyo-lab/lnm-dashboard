@@ -31,7 +31,12 @@ export interface RetrievedChunk {
 // --- Agent Pool Mapping ---
 
 const AGENT_POOLS: Record<string, string[] | null> = {
-  content: ["03-content-strategy", "05-on-page-seo", "13-case-studies"],
+  content: [
+    "03-content-strategy",
+    "05-on-page-seo",
+    "13-case-studies",
+    "18-content-writing-rules",
+  ],
   technical: [
     "04-technical-seo",
     "06-page-speed-and-performance",
@@ -47,6 +52,7 @@ const AGENT_POOLS: Record<string, string[] | null> = {
     "13-case-studies",
   ],
   "writing-rules": ["18-content-writing-rules"],
+  "brief-examples": ["19-brief-examples"],
   all: null, // search everything
 };
 
@@ -216,5 +222,81 @@ export async function retrieveAcrossPools(
     query,
     categories: searchAll ? undefined : Array.from(allCategories),
     topK,
+  });
+}
+
+// --- Page-Type & Brief Retrieval ---
+
+/** Pool sets per page type — determines which knowledge pools to search. */
+const PAGE_TYPE_POOLS: Record<string, string[]> = {
+  service: ["content", "on-page", "strategy", "writing-rules"],
+  location: ["content", "on-page", "local-seo", "writing-rules"],
+  blog: ["content", "on-page", "strategy", "writing-rules"],
+  landing: ["content", "on-page", "strategy", "writing-rules"],
+};
+
+/**
+ * Retrieve chunks tailored to a specific page type.
+ * Merges relevant agent pools and runs a single hybrid search across them.
+ */
+export async function retrieveForPageType(
+  pageType: "service" | "location" | "blog" | "landing",
+  query: string,
+  topK?: number
+): Promise<RetrievedChunk[]> {
+  const pools = PAGE_TYPE_POOLS[pageType];
+  if (!pools) {
+    throw new Error(
+      `Unknown page type: "${pageType}". Valid types: ${Object.keys(PAGE_TYPE_POOLS).join(", ")}`
+    );
+  }
+  return retrieveAcrossPools(query, pools, topK ?? 10);
+}
+
+/**
+ * Retrieve brief examples that demonstrate how specific writing-rule codes
+ * (e.g. "FS", "PAA", "NER") are applied in real content briefs.
+ * Searches category 19 (brief-examples) for chunks containing those rule codes.
+ */
+export async function retrieveRuleExamples(
+  ruleCodes: string[],
+  topK?: number
+): Promise<RetrievedChunk[]> {
+  if (ruleCodes.length === 0) return [];
+
+  // Build a query that emphasizes the rule codes so both vector similarity
+  // and full-text search surface relevant examples.
+  const query = `content writing rules: ${ruleCodes.join(" ")} — brief examples applying these rules`;
+
+  const results = await retrieveChunks({
+    query,
+    categories: ["19-brief-examples"],
+    topK: topK ?? 10,
+  });
+
+  // Post-filter: keep only chunks whose content mentions at least one of the
+  // requested rule codes (case-insensitive). This prevents false positives from
+  // vector similarity alone.
+  const codePatterns = ruleCodes.map((c) => new RegExp(`\\b${c}\\b`, "i"));
+  return results.filter((chunk) =>
+    codePatterns.some((pattern) => pattern.test(chunk.content))
+  );
+}
+
+/**
+ * Retrieve briefs similar to the given topic and page type from category 19
+ * (brief-examples). Used as few-shot examples when generating new briefs.
+ */
+export async function retrieveSimilarBriefs(
+  topic: string,
+  pageType: string,
+  topK?: number
+): Promise<RetrievedChunk[]> {
+  const query = `${pageType} page brief for: ${topic}`;
+
+  return retrieveChunks({
+    query,
+    categories: ["19-brief-examples"],
+    topK: topK ?? 5,
   });
 }
