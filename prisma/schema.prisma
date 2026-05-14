@@ -17,6 +17,7 @@ model User {
   updatedAt    DateTime     @updatedAt
   generations     Generation[]
   contentSessions ContentSession[]
+  briefs          Brief[]
 }
 
 // --- Knowledge Base ---
@@ -67,6 +68,7 @@ model ContentSession {
   updatedAt   DateTime         @updatedAt
   user        User             @relation(fields: [userId], references: [id])
   sections    ContentSection[]
+  sourceBrief Brief?
 
   @@index([userId])
   @@index([status])
@@ -87,6 +89,30 @@ model ContentSection {
   session      ContentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+// --- Brief Development ---
+model Brief {
+  id          String           @id @default(cuid())
+  userId      String
+  topic       String
+  pageType    String
+  niche       String
+  location    String?
+  clientName  String?
+  domain      String?          // for SearchAtlas keyword lookup
+  status      String           @default("draft") // draft | reviewing | approved
+  version     Int              @default(1)
+  data        Json             // EnhancedBrief JSON
+  keywordData Json?            // raw SearchAtlas response cached
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id])
+  sessionId   String?          @unique
+  session     ContentSession?  @relation(fields: [sessionId], references: [id])
+
+  @@index([userId])
+  @@index([status])
 }
 
 // --- Project/Phase Tracking ---
