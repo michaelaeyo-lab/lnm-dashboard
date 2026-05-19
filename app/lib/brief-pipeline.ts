@@ -843,11 +843,13 @@ async function stepHierarchyAndTitle(
         role: "system",
         content: `You are a semantic SEO heading architect. Build a comprehensive H1-H4 heading structure AND a title tag for a ${params.pageType} page.
 
-HEADING RULES:
-- Exactly 1 H1 (main topic heading)
+HEADING RULES (STRICTLY ENFORCED — violations will be rejected):
+- The FIRST heading MUST be level 1 (H1). Exactly 1 H1. This is non-negotiable.
+- Minimum 15 total headings. Aim for 20-35 headings for comprehensive coverage.
 - 5-12 H2s covering all contextual vectors
 - H3s under H2s for subtopics, questions, or list items
 - H4s sparingly for deep detail
+- Valid nesting only: H1 → H2 → H3 → H4. Never skip levels (no H1 → H3, no H2 → H4).
 - Progressive depth: foundational understanding → advanced depth
 - Each heading must satisfy a unique intent layer (no duplicate intent)
 - Headings must flow logically — each leads naturally to the next
@@ -856,6 +858,8 @@ HEADING RULES:
 - Natural, search-friendly text — not keyword-stuffed
 - Cover SERP consensus topics (minimum requirements) AND SERP gaps (differentiation)
 - Address competitor weaknesses with stronger coverage
+
+CRITICAL: Your output MUST start with exactly one H1 heading (level: 1), followed by H2s and their children. If you return headings that don't start with H1 or have fewer than 15 total, the output will be rejected.
 
 TITLE TAG RULES:
 - Must reflect the dominant search intent with contextual precision
@@ -902,8 +906,49 @@ ${briefExamples ? `Similar Brief Examples:\n${briefExamples}` : ""}`,
     titleTag?: TitleTagData;
   };
 
+  let headings = parsed.headings || [];
+
+  // --- Structural enforcement (hard rules) ---
+
+  // Ensure exactly 1 H1 at the start
+  const h1Count = headings.filter((h) => h.level === 1).length;
+  if (h1Count === 0) {
+    // Prepend an H1 from the topic
+    headings = [{ level: 1, text: params.topic }, ...headings];
+  } else if (h1Count > 1) {
+    // Demote extra H1s to H2
+    let seenH1 = false;
+    headings = headings.map((h) => {
+      if (h.level === 1) {
+        if (seenH1) return { ...h, level: 2 };
+        seenH1 = true;
+      }
+      return h;
+    });
+  }
+
+  // Ensure first heading is H1
+  if (headings.length > 0 && headings[0].level !== 1) {
+    headings = [{ level: 1, text: params.topic }, ...headings];
+  }
+
+  // Fix invalid nesting: no skipping levels (H1→H3 becomes H1→H2)
+  let maxAllowed = 1;
+  headings = headings.map((h) => {
+    if (h.level > maxAllowed + 1) {
+      return { ...h, level: maxAllowed + 1 };
+    }
+    maxAllowed = Math.max(maxAllowed, h.level);
+    return h;
+  });
+
+  // Warn if too few headings (but don't block — the LLM might have a reason)
+  if (headings.length < 10) {
+    console.warn(`[Step 8] Only ${headings.length} headings generated for "${params.topic}" — expected 15+`);
+  }
+
   return {
-    rawHeadings: parsed.headings || [],
+    rawHeadings: headings,
     titleTag: parsed.titleTag || {
       titleTag: params.topic,
       contextualAttributes: [],
@@ -1100,6 +1145,13 @@ async function stepHeadingValidation(
         role: "system",
         content: `You are a heading quality validator. Evaluate the heading structure against these criteria:
 
+STRUCTURAL REQUIREMENTS (automatic failure if violated):
+- Must have exactly 1 H1 as the first heading
+- Must have at least 15 total headings (5 headings is far too few for any page)
+- Valid nesting: H1 → H2 → H3 → H4 (no skipping levels like H1 → H3)
+- If any structural requirement is violated, score MUST be ≤ 4 and correctedHeadings MUST be provided.
+
+QUALITY CRITERIA:
 1. Contextual continuity: Does each heading logically lead to the next?
 2. Unique intent: Does each heading satisfy a distinct intent layer? No two headings should answer the same question.
 3. Semantic repetition: Are any headings saying the same thing differently?
@@ -1107,6 +1159,7 @@ async function stepHeadingValidation(
 5. Edge case coverage: Are edge cases and exception scenarios addressed?
 6. Negative attribute coverage: Does the page include balanced perspective (e.g., "safest areas" should also mention areas to avoid)?
 7. Syntactic clarity: Are headings clear, natural, and free from awkward grammar?
+8. Sufficient coverage: Are there enough headings to comprehensively cover the topic? A service page needs 20-35 headings.
 
 Return JSON:
 {
@@ -1114,7 +1167,7 @@ Return JSON:
   "issues": [{
     "headingIndex": number,
     "headingText": string,
-    "issueType": "semantic-repetition"|"missing-unique-intent"|"continuity-break"|"depth-regression"|"edge-case-missing"|"syntactic-unclear"|"negative-attribute-missing",
+    "issueType": "semantic-repetition"|"missing-unique-intent"|"continuity-break"|"depth-regression"|"edge-case-missing"|"syntactic-unclear"|"negative-attribute-missing"|"missing-h1"|"insufficient-headings"|"invalid-nesting",
     "severity": "low"|"medium"|"high",
     "description": string,
     "suggestedFix": string
