@@ -54,7 +54,12 @@ export async function POST(request: Request) {
         clientName: clientName?.trim() || null,
         domain: domain?.trim() || null,
         status: "draft",
-        data: { contextualVectors: [], headings: [], entityMap: [], connectionMap: [], competitors: [], knowledgeGaps: [] },
+        data: {
+          contextualVectors: [], headings: [], entityMap: [], connectionMap: [],
+          competitors: [], knowledgeGaps: [],
+          queryPreAnalysis: null, serpAnalysis: null, deepCompetitorAnalysis: null,
+          topicalMap: null, titleTag: null, headingValidation: null, qualityReport: null,
+        },
       },
     });
 

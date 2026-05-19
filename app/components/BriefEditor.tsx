@@ -8,7 +8,15 @@ import type {
   EnhancedHeading,
   EntityMapping,
   ConnectionEntry,
+  QueryPreAnalysis,
+  SerpAnalysis,
+  DeepCompetitorAnalysisResult,
+  TopicalMapEntry,
+  HeadingValidation,
+  BriefQualityReport,
 } from "../lib/types";
+
+type TabId = "headings" | "entities" | "connections" | "competitors" | "analysis" | "topical-map" | "validation";
 
 // --- Sub-components ---
 
@@ -21,6 +29,16 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || colors.draft}`}>
       {status}
+    </span>
+  );
+}
+
+function QualityScoreBadge({ score }: { score?: number }) {
+  if (score === undefined || score === null) return null;
+  const color = score >= 80 ? "text-green-400 bg-green-900/30" : score >= 60 ? "text-yellow-400 bg-yellow-900/30" : "text-red-400 bg-red-900/30";
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${color}`}>
+      {score}/100
     </span>
   );
 }
@@ -66,6 +84,11 @@ function HeadingRow({
         <span className="text-xs text-zinc-600 w-6 flex-shrink-0 pt-0.5">H{heading.level}</span>
         <span className="text-sm text-zinc-200 flex-1">{heading.text}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {heading.contentDesignPattern && (
+            <span className="px-1.5 py-0.5 bg-purple-900/30 text-purple-300 rounded text-[10px]">
+              {heading.contentDesignPattern}
+            </span>
+          )}
           {heading.ruleCodes.slice(0, 3).map((code) => (
             <span key={code} className="px-1.5 py-0.5 bg-blue-900/30 text-blue-300 rounded text-[10px]">
               {code}
@@ -93,7 +116,6 @@ function HeadingRow({
 
       {expanded && (
         <div className="px-6 pb-3 space-y-3" style={{ paddingLeft: `${24 + indent}px` }}>
-          {/* Structure Instructions */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
               Structure Instructions
@@ -106,7 +128,6 @@ function HeadingRow({
             />
           </div>
 
-          {/* Intent */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
               Intent
@@ -119,24 +140,30 @@ function HeadingRow({
             />
           </div>
 
-          {/* Rule Codes */}
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-              Rule Codes
-            </label>
-            <div className="flex flex-wrap gap-1">
-              {heading.ruleCodes.map((code) => (
-                <span key={code} className="px-1.5 py-0.5 bg-blue-900/30 text-blue-300 rounded text-[10px]">
-                  {code}
-                </span>
-              ))}
-              {heading.ruleCodes.length === 0 && (
-                <span className="text-xs text-zinc-600">No rules assigned</span>
-              )}
+          <div className="flex flex-wrap gap-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+                Rule Codes
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {heading.ruleCodes.map((code) => (
+                  <span key={code} className="px-1.5 py-0.5 bg-blue-900/30 text-blue-300 rounded text-[10px]">
+                    {code}
+                  </span>
+                ))}
+                {heading.ruleCodes.length === 0 && (
+                  <span className="text-xs text-zinc-600">No rules assigned</span>
+                )}
+              </div>
             </div>
+            {heading.snippetTarget && (
+              <span className="px-1.5 py-0.5 bg-green-900/30 text-green-300 rounded text-[10px] self-end">Snippet Target</span>
+            )}
+            {heading.paaTarget && (
+              <span className="px-1.5 py-0.5 bg-yellow-900/30 text-yellow-300 rounded text-[10px] self-end">PAA Target</span>
+            )}
           </div>
 
-          {/* Target Queries */}
           {heading.targetQueries.length > 0 && (
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
@@ -154,7 +181,6 @@ function HeadingRow({
             </div>
           )}
 
-          {/* SERP Features */}
           {heading.serpFeatures.length > 0 && (
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
@@ -170,7 +196,6 @@ function HeadingRow({
             </div>
           )}
 
-          {/* Word Count */}
           {heading.wordCountTarget && (
             <div className="text-xs text-zinc-500">
               Target: ~{heading.wordCountTarget} words
@@ -231,32 +256,70 @@ function ConnectionList({ connections }: { connections: ConnectionEntry[] }) {
   );
 }
 
-function CompetitorList({ competitors }: { competitors: { url: string; title: string; headings: string[]; wordCount?: number; serpPosition?: number }[] }) {
+function CompetitorList({
+  competitors,
+  deepAnalysis,
+}: {
+  competitors: { url: string; title: string; headings: string[]; wordCount?: number; serpPosition?: number }[];
+  deepAnalysis?: DeepCompetitorAnalysisResult;
+}) {
   if (competitors.length === 0) return null;
   return (
-    <div>
-      <h3 className="text-xs font-medium text-zinc-400 mb-2">Competitors</h3>
-      <div className="space-y-1.5">
-        {competitors.map((c, i) => (
-          <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
-            <div className="flex items-center gap-2">
-              {c.serpPosition && (
-                <span className="text-zinc-500">#{c.serpPosition}</span>
-              )}
-              <span className="text-zinc-300 truncate">{c.title || c.url}</span>
-              {c.wordCount && (
-                <span className="text-zinc-600 ml-auto">{c.wordCount.toLocaleString()} words</span>
-              )}
-            </div>
-            {c.headings.length > 0 && (
-              <p className="text-zinc-600 mt-1 truncate">
-                Headings: {c.headings.slice(0, 5).join(" | ")}
-                {c.headings.length > 5 && ` +${c.headings.length - 5}`}
-              </p>
-            )}
-          </div>
-        ))}
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-xs font-medium text-zinc-400 mb-2">Competitors</h3>
+        <div className="space-y-1.5">
+          {competitors.map((c, i) => {
+            const deep = deepAnalysis?.competitors?.find((d) => d.url === c.url);
+            return (
+              <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
+                <div className="flex items-center gap-2">
+                  {c.serpPosition && (
+                    <span className="text-zinc-500">#{c.serpPosition}</span>
+                  )}
+                  <span className="text-zinc-300 truncate">{c.title || c.url}</span>
+                  {c.wordCount && (
+                    <span className="text-zinc-600 ml-auto">{c.wordCount.toLocaleString()} words</span>
+                  )}
+                </div>
+                {c.headings.length > 0 && (
+                  <p className="text-zinc-600 mt-1 truncate">
+                    Headings: {c.headings.slice(0, 5).join(" | ")}
+                    {c.headings.length > 5 && ` +${c.headings.length - 5}`}
+                  </p>
+                )}
+                {deep && (
+                  <div className="mt-2 space-y-1 border-t border-zinc-800/50 pt-1.5">
+                    {deep.strengths.length > 0 && (
+                      <p className="text-green-400/80"><span className="text-zinc-500">Strengths:</span> {deep.strengths.join("; ")}</p>
+                    )}
+                    {deep.weaknesses.length > 0 && (
+                      <p className="text-orange-400/80"><span className="text-zinc-500">Weaknesses:</span> {deep.weaknesses.join("; ")}</p>
+                    )}
+                    {deep.contentDesignPatterns.length > 0 && (
+                      <div className="flex gap-1 mt-1">
+                        {deep.contentDesignPatterns.map((p, pi) => (
+                          <span key={pi} className="px-1.5 py-0.5 bg-purple-900/20 text-purple-300 rounded text-[10px]">{p}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
+      {deepAnalysis?.gapKeywords && deepAnalysis.gapKeywords.length > 0 && (
+        <div>
+          <h3 className="text-xs font-medium text-zinc-400 mb-2">Gap Keywords</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {deepAnalysis.gapKeywords.map((k, i) => (
+              <span key={i} className="px-2 py-1 bg-blue-900/20 text-blue-300 border border-blue-800/30 rounded text-xs">{k}</span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -277,6 +340,271 @@ function KnowledgeGaps({ gaps }: { gaps: string[] }) {
   );
 }
 
+// --- New Tab Components ---
+
+function AnalysisTab({ queryPreAnalysis, serpAnalysis }: { queryPreAnalysis?: QueryPreAnalysis; serpAnalysis?: SerpAnalysis }) {
+  if (!queryPreAnalysis && !serpAnalysis) {
+    return <div className="p-6 text-center text-zinc-600 text-sm">No analysis data available (generated with older pipeline)</div>;
+  }
+
+  return (
+    <div className="p-4 space-y-5">
+      {queryPreAnalysis && (
+        <>
+          <div>
+            <h3 className="text-xs font-medium text-zinc-400 mb-2">Query Analysis</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
+                <span className="text-[10px] text-zinc-500 block">Search Intent</span>
+                <span className="text-xs text-zinc-200">{queryPreAnalysis.searchIntent}</span>
+              </div>
+              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
+                <span className="text-[10px] text-zinc-500 block">Query Type</span>
+                <span className="text-xs text-zinc-200">{queryPreAnalysis.queryType}</span>
+              </div>
+              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
+                <span className="text-[10px] text-zinc-500 block">Business Model</span>
+                <span className="text-xs text-zinc-200">{queryPreAnalysis.businessModel}</span>
+              </div>
+              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
+                <span className="text-[10px] text-zinc-500 block">Depth Required</span>
+                <span className="text-xs text-zinc-200">{queryPreAnalysis.intentSatisfactionThreshold.depth}</span>
+              </div>
+              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
+                <span className="text-[10px] text-zinc-500 block">Freshness</span>
+                <span className="text-xs text-zinc-200">{queryPreAnalysis.freshnessRequirement}</span>
+              </div>
+              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
+                <span className="text-[10px] text-zinc-500 block">Completeness</span>
+                <span className={`text-xs ${queryPreAnalysis.queryCompleteness.isComplete ? "text-green-400" : "text-orange-400"}`}>
+                  {queryPreAnalysis.queryCompleteness.isComplete ? "Complete" : "Incomplete"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {!queryPreAnalysis.queryCompleteness.isComplete && queryPreAnalysis.queryCompleteness.missingQualifiers.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-orange-400 mb-2">Missing Qualifiers</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {queryPreAnalysis.queryCompleteness.missingQualifiers.map((q, i) => (
+                  <span key={i} className="px-2 py-1 bg-orange-900/20 text-orange-300 border border-orange-800/30 rounded text-xs">{q}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="text-xs font-medium text-zinc-400 mb-2">Audience Segments</h3>
+            <div className="flex gap-2">
+              <span className="px-2 py-1 bg-blue-900/20 text-blue-300 rounded text-xs">{queryPreAnalysis.audienceSegments.primary}</span>
+              {queryPreAnalysis.audienceSegments.secondary && (
+                <span className="px-2 py-1 bg-zinc-800 text-zinc-300 rounded text-xs">{queryPreAnalysis.audienceSegments.secondary}</span>
+              )}
+              {queryPreAnalysis.audienceSegments.tertiary && (
+                <span className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-xs">{queryPreAnalysis.audienceSegments.tertiary}</span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {serpAnalysis && (
+        <>
+          {serpAnalysis.consensusCoverage.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-zinc-400 mb-2">SERP Consensus (must cover)</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {serpAnalysis.consensusCoverage.map((t, i) => (
+                  <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-300 rounded text-xs">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {serpAnalysis.serpGaps.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-green-400 mb-2">SERP Gaps (opportunities)</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {serpAnalysis.serpGaps.map((g, i) => (
+                  <span key={i} className="px-2 py-1 bg-green-900/20 text-green-300 border border-green-800/30 rounded text-xs">{g}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {serpAnalysis.compressionPatterns.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-red-400 mb-2">Compression Patterns (avoid)</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {serpAnalysis.compressionPatterns.map((p, i) => (
+                  <span key={i} className="px-2 py-1 bg-red-900/20 text-red-300 border border-red-800/30 rounded text-xs">{p}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {serpAnalysis.featuredSnippetOpportunities.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-zinc-400 mb-2">Featured Snippet Opportunities</h3>
+              <div className="space-y-1.5">
+                {serpAnalysis.featuredSnippetOpportunities.map((fs, i) => (
+                  <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
+                    <span className="text-zinc-300">{fs.query}</span>
+                    <span className="text-zinc-600 ml-2">({fs.currentFormat})</span>
+                    <p className="text-zinc-500 mt-0.5">{fs.strategy}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="text-xs font-medium text-zinc-400 mb-2">SERP Features Present</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(serpAnalysis.serpFeaturePresence).map(([key, val]) => (
+                <span key={key} className={`px-2 py-1 rounded text-xs ${val ? "bg-green-900/20 text-green-300" : "bg-zinc-800/50 text-zinc-600"}`}>
+                  {key.replace(/([A-Z])/g, " $1").trim()}
+                </span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TopicalMapTab({ topicalMap }: { topicalMap?: TopicalMapEntry[] }) {
+  if (!topicalMap || topicalMap.length === 0) {
+    return <div className="p-6 text-center text-zinc-600 text-sm">No topical map available</div>;
+  }
+
+  const grouped = {
+    root: topicalMap.filter((t) => t.relationship === "root"),
+    supporting: topicalMap.filter((t) => t.relationship === "supporting"),
+    adjacent: topicalMap.filter((t) => t.relationship === "adjacent"),
+    downstream: topicalMap.filter((t) => t.relationship === "downstream"),
+  };
+
+  const sectionColors: Record<string, string> = {
+    root: "border-blue-800/50 bg-blue-900/10",
+    supporting: "border-green-800/50 bg-green-900/10",
+    adjacent: "border-yellow-800/50 bg-yellow-900/10",
+    downstream: "border-purple-800/50 bg-purple-900/10",
+  };
+
+  const textColors: Record<string, string> = {
+    root: "text-blue-300",
+    supporting: "text-green-300",
+    adjacent: "text-yellow-300",
+    downstream: "text-purple-300",
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      {(["root", "supporting", "adjacent", "downstream"] as const).map((rel) => {
+        const items = grouped[rel];
+        if (items.length === 0) return null;
+        return (
+          <div key={rel}>
+            <h3 className={`text-xs font-medium mb-2 capitalize ${textColors[rel]}`}>{rel} Topics</h3>
+            <div className="space-y-1">
+              {items.map((t, i) => (
+                <div key={i} className={`text-xs px-2 py-1.5 rounded border ${sectionColors[rel]}`}>
+                  <span className={textColors[rel]}>{t.topic}</span>
+                  {t.suggestedPageType && (
+                    <span className="text-zinc-600 ml-2">({t.suggestedPageType})</span>
+                  )}
+                  {t.clusterLabel && (
+                    <span className="text-zinc-600 ml-2">cluster: {t.clusterLabel}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ValidationTab({ headingValidation, qualityReport }: { headingValidation?: HeadingValidation; qualityReport?: BriefQualityReport }) {
+  if (!headingValidation && !qualityReport) {
+    return <div className="p-6 text-center text-zinc-600 text-sm">No validation data available</div>;
+  }
+
+  const scoreColor = (score: number) =>
+    score >= 80 ? "text-green-400" : score >= 60 ? "text-yellow-400" : "text-red-400";
+
+  return (
+    <div className="p-4 space-y-5">
+      {qualityReport && (
+        <div>
+          <h3 className="text-xs font-medium text-zinc-400 mb-2">Quality Scores</h3>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="px-2 py-2 bg-zinc-800/30 rounded text-center">
+              <div className={`text-2xl font-bold ${scoreColor(qualityReport.overallScore)}`}>{qualityReport.overallScore}</div>
+              <div className="text-[10px] text-zinc-500">Overall</div>
+            </div>
+            {Object.entries(qualityReport.breakdown).map(([key, val]) => (
+              <div key={key} className="px-2 py-2 bg-zinc-800/30 rounded text-center">
+                <div className={`text-lg font-bold ${scoreColor(val)}`}>{val}</div>
+                <div className="text-[10px] text-zinc-500">{key.replace(/([A-Z])/g, " $1").trim()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {headingValidation && (
+        <div>
+          <h3 className="text-xs font-medium text-zinc-400 mb-2">
+            Heading Validation
+            <span className={`ml-2 ${headingValidation.score >= 8 ? "text-green-400" : "text-orange-400"}`}>
+              {headingValidation.score}/10
+            </span>
+          </h3>
+          {headingValidation.issues.length > 0 ? (
+            <div className="space-y-1.5">
+              {headingValidation.issues.map((issue, i) => (
+                <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      issue.severity === "high" ? "bg-red-900/30 text-red-300" :
+                      issue.severity === "medium" ? "bg-yellow-900/30 text-yellow-300" :
+                      "bg-zinc-700 text-zinc-400"
+                    }`}>
+                      {issue.severity}
+                    </span>
+                    <span className="text-zinc-500">{issue.issueType}</span>
+                    <span className="text-zinc-400 ml-auto">H: {issue.headingText.slice(0, 40)}{issue.headingText.length > 40 ? "..." : ""}</span>
+                  </div>
+                  <p className="text-zinc-500 mt-1">{issue.description}</p>
+                  {issue.suggestedFix && <p className="text-green-400/70 mt-0.5">{issue.suggestedFix}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-green-400">All headings passed validation</p>
+          )}
+        </div>
+      )}
+
+      {qualityReport?.recommendations && qualityReport.recommendations.length > 0 && (
+        <div>
+          <h3 className="text-xs font-medium text-zinc-400 mb-2">Recommendations</h3>
+          <div className="space-y-1">
+            {qualityReport.recommendations.map((r, i) => (
+              <p key={i} className="text-xs text-zinc-400 px-2 py-1 bg-zinc-800/30 rounded">{r}</p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Main Component ---
 
 export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
@@ -284,7 +612,7 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
   const [brief, setBrief] = useState(initialBrief);
   const [data, setData] = useState<EnhancedBrief>(initialBrief.data);
   const [expandedHeading, setExpandedHeading] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"headings" | "entities" | "connections" | "competitors">("headings");
+  const [activeTab, setActiveTab] = useState<TabId>("headings");
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [startingWrite, setStartingWrite] = useState(false);
@@ -322,7 +650,6 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
   async function handleStatusChange(status: string) {
     setSaving(true);
     try {
-      // Save data too if dirty
       const body: Record<string, unknown> = { status };
       if (dirty) body.data = data;
 
@@ -347,14 +674,11 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
         method: "POST",
       });
       if (res.ok) {
-        const { sessionId } = await res.json();
         router.push("/write");
-        // The content writer page will show the new session
         return;
       }
       const err = await res.json().catch(() => ({}));
       if (err.sessionId) {
-        // Session already exists
         router.push("/write");
         return;
       }
@@ -372,11 +696,18 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
     router.push("/briefs");
   }
 
-  const tabs = [
-    { id: "headings" as const, label: "Headings", count: data.headings.length },
-    { id: "entities" as const, label: "Entities", count: data.entityMap.length },
-    { id: "connections" as const, label: "Links", count: data.connectionMap.length },
-    { id: "competitors" as const, label: "Competitors", count: data.competitors.length },
+  const hasAnalysis = !!(data.queryPreAnalysis || data.serpAnalysis);
+  const hasTopicalMap = !!(data.topicalMap && data.topicalMap.length > 0);
+  const hasValidation = !!(data.headingValidation || data.qualityReport);
+
+  const tabs: { id: TabId; label: string; count?: number }[] = [
+    { id: "headings", label: "Headings", count: data.headings.length },
+    ...(hasAnalysis ? [{ id: "analysis" as TabId, label: "Analysis" }] : []),
+    { id: "entities", label: "Entities", count: data.entityMap.length },
+    ...(hasTopicalMap ? [{ id: "topical-map" as TabId, label: "Topical Map", count: data.topicalMap!.length }] : []),
+    { id: "connections", label: "Links", count: data.connectionMap.length },
+    { id: "competitors", label: "Competitors", count: data.competitors.length },
+    ...(hasValidation ? [{ id: "validation" as TabId, label: "Validation" }] : []),
   ];
 
   const totalVolume = data.headings.reduce(
@@ -397,9 +728,13 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
               ← Briefs
             </button>
             <StatusBadge status={brief.status} />
+            <QualityScoreBadge score={data.qualityReport?.overallScore} />
             <span className="text-xs text-zinc-600">v{brief.version}</span>
           </div>
           <h1 className="text-xl font-bold text-zinc-100">{brief.topic}</h1>
+          {data.titleTag?.titleTag && (
+            <p className="text-sm text-blue-400 mt-0.5">{data.titleTag.titleTag}</p>
+          )}
           <p className="text-xs text-zinc-500 mt-1">
             {brief.niche} / {brief.pageType}
             {brief.location && ` / ${brief.location}`}
@@ -491,19 +826,19 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-zinc-800">
+      <div className="flex gap-1 mb-4 border-b border-zinc-800 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-2 text-sm transition-colors border-b-2 ${
+            className={`px-3 py-2 text-sm transition-colors border-b-2 whitespace-nowrap ${
               activeTab === tab.id
                 ? "text-zinc-100 border-blue-500"
                 : "text-zinc-500 border-transparent hover:text-zinc-300"
             }`}
           >
             {tab.label}
-            {tab.count > 0 && (
+            {tab.count !== undefined && tab.count > 0 && (
               <span className="ml-1.5 text-xs text-zinc-600">{tab.count}</span>
             )}
           </button>
@@ -532,10 +867,18 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
           </div>
         )}
 
+        {activeTab === "analysis" && (
+          <AnalysisTab queryPreAnalysis={data.queryPreAnalysis} serpAnalysis={data.serpAnalysis} />
+        )}
+
         {activeTab === "entities" && (
           <div className="p-4">
             <EntityList entities={data.entityMap} />
           </div>
+        )}
+
+        {activeTab === "topical-map" && (
+          <TopicalMapTab topicalMap={data.topicalMap} />
         )}
 
         {activeTab === "connections" && (
@@ -546,8 +889,12 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
 
         {activeTab === "competitors" && (
           <div className="p-4">
-            <CompetitorList competitors={data.competitors} />
+            <CompetitorList competitors={data.competitors} deepAnalysis={data.deepCompetitorAnalysis} />
           </div>
+        )}
+
+        {activeTab === "validation" && (
+          <ValidationTab headingValidation={data.headingValidation} qualityReport={data.qualityReport} />
         )}
       </div>
     </div>

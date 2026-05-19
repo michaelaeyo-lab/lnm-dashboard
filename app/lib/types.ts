@@ -117,6 +117,10 @@ export interface EnhancedHeading {
   ruleCodes: string[]; // which of 56 rules apply
   intent: string;
   wordCountTarget?: number;
+  // V2 fields (optional, backward compatible)
+  contentDesignPattern?: string; // paragraph | table | comparison | list | visual
+  snippetTarget?: boolean;
+  paaTarget?: boolean;
 }
 
 export interface EnhancedBrief {
@@ -126,6 +130,209 @@ export interface EnhancedBrief {
   connectionMap: ConnectionEntry[];
   competitors: CompetitorEntry[];
   knowledgeGaps: string[];
+  // V2 fields (optional, backward compatible with old briefs)
+  queryPreAnalysis?: QueryPreAnalysis;
+  serpAnalysis?: SerpAnalysis;
+  deepCompetitorAnalysis?: DeepCompetitorAnalysisResult;
+  topicalMap?: TopicalMapEntry[];
+  titleTag?: TitleTagData;
+  headingValidation?: HeadingValidation;
+  qualityReport?: BriefQualityReport;
+}
+
+// --- Brief Pipeline V2 Types ---
+
+// Step 1: Bulk SERP feature data
+export interface BulkSerpFeatureMatrix {
+  keyword: string;
+  features: string[];
+  topResultCount: number;
+  avgWordCount?: number;
+}
+
+// Step 2: Knowledge context aggregated from RAG retrieval
+export interface KnowledgeContext {
+  pageTypeChunks: RetrievedChunkRef[];
+  briefExampleChunks: RetrievedChunkRef[];
+  strategyChunks: RetrievedChunkRef[];
+}
+
+export interface RetrievedChunkRef {
+  category: string;
+  title: string;
+  content: string;
+  sourceFile: string | null;
+  similarity: number;
+}
+
+// Step 3: Competitor dataset from SearchAtlas
+export interface CompetitorDataset {
+  competitorKeywords: Map<string, CompetitorKeywordData[]> | null;
+  gapKeywords: CompetitorKeywordData[] | null;
+}
+
+export interface CompetitorKeywordData {
+  keyword: string;
+  volume: number;
+  position?: number;
+  intent?: string;
+}
+
+// Step 4: Query & Intent Pre-Analysis
+export type SearchIntentType =
+  | "informational"
+  | "commercial"
+  | "transactional"
+  | "navigational"
+  | "investigational"
+  | "local"
+  | "comparative"
+  | "mixed";
+
+export type QueryType =
+  | "head-term"
+  | "mid-tail"
+  | "long-tail"
+  | "entity-based"
+  | "attribute-based"
+  | "modifier-based"
+  | "problem-based";
+
+export type BusinessModel =
+  | "lead-gen"
+  | "affiliate"
+  | "ecommerce"
+  | "saas"
+  | "local-service"
+  | "publisher"
+  | "marketplace";
+
+export type FreshnessRequirement =
+  | "evergreen"
+  | "seasonal"
+  | "time-sensitive"
+  | "trending";
+
+export interface QueryPreAnalysis {
+  searchIntent: SearchIntentType;
+  queryType: QueryType;
+  queryCompleteness: {
+    isComplete: boolean;
+    missingQualifiers: string[];
+  };
+  audienceSegments: {
+    primary: string;
+    secondary?: string;
+    tertiary?: string;
+  };
+  businessModel: BusinessModel;
+  intentSatisfactionThreshold: {
+    depth: "shallow" | "moderate" | "deep" | "exhaustive";
+    description: string;
+  };
+  freshnessRequirement: FreshnessRequirement;
+}
+
+// Step 5: SERP Analysis
+export interface SerpAnalysis {
+  consensusCoverage: string[];
+  serpGaps: string[];
+  compressionPatterns: string[];
+  featuredSnippetOpportunities: {
+    query: string;
+    currentFormat: string;
+    strategy: string;
+  }[];
+  aiOverviewPresence: boolean;
+  serpFeaturePresence: {
+    imagePack: boolean;
+    video: boolean;
+    maps: boolean;
+    forums: boolean;
+    paa: boolean;
+    knowledgePanel: boolean;
+  };
+  autocompleteVariations: string[];
+}
+
+// Step 6: Deep Competitor Analysis
+export interface CompetitorDeepAnalysis {
+  url: string;
+  title: string;
+  serpPosition: number;
+  headingDepth: {
+    h1: number;
+    h2: number;
+    h3: number;
+    h4: number;
+    maxDepth: number;
+  };
+  contentDesignPatterns: string[];
+  strengths: string[];
+  weaknesses: string[];
+  topicalArchitecture: string[];
+  entityCoverage: string[];
+  rankingKeywords?: string[];
+}
+
+export interface DeepCompetitorAnalysisResult {
+  competitors: CompetitorDeepAnalysis[];
+  crossCompetitorEntities: string[];
+  gapKeywords: string[];
+}
+
+// Step 7: Topical Map
+export interface TopicalMapEntry {
+  topic: string;
+  relationship: "root" | "supporting" | "adjacent" | "downstream";
+  suggestedPageType?: string;
+  clusterLabel?: string;
+}
+
+// Step 8: Title Tag
+export interface TitleTagData {
+  titleTag: string;
+  contextualAttributes: string[];
+  rationale: string;
+}
+
+// Step 11: Heading Validation
+export type ValidationIssueType =
+  | "semantic-repetition"
+  | "missing-unique-intent"
+  | "continuity-break"
+  | "depth-regression"
+  | "edge-case-missing"
+  | "syntactic-unclear"
+  | "negative-attribute-missing";
+
+export interface ValidationIssue {
+  headingIndex: number;
+  headingText: string;
+  issueType: ValidationIssueType;
+  severity: "low" | "medium" | "high";
+  description: string;
+  suggestedFix?: string;
+}
+
+export interface HeadingValidation {
+  score: number;
+  issues: ValidationIssue[];
+  correctedHeadings?: EnhancedHeading[];
+}
+
+// Step 12: Quality Report
+export interface BriefQualityReport {
+  overallScore: number;
+  breakdown: {
+    competitorCoverage: number;
+    intentSatisfaction: number;
+    semanticCoherence: number;
+    entityCompleteness: number;
+    headingQuality: number;
+  };
+  knowledgeGaps: string[];
+  recommendations: string[];
 }
 
 export interface BriefData {

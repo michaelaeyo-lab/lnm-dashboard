@@ -6,12 +6,18 @@ import { KeywordUpload } from "./KeywordUpload";
 import type { QueryEntry } from "../lib/types";
 
 const PIPELINE_STEPS = [
-  "Researching keywords",
-  "Mapping contextual vectors",
-  "Building heading hierarchy",
-  "Generating structure instructions",
+  "Researching keywords & SERP data",
+  "Retrieving knowledge base",
+  "Collecting competitor data",
+  "Analyzing query intent & audience",
+  "Analyzing SERP patterns",
+  "Analyzing competitors in depth",
+  "Mapping contextual vectors & entities",
+  "Building heading hierarchy & title",
+  "Generating structure & mapping queries",
   "Mapping internal connections",
-  "Assigning queries to headings",
+  "Validating heading quality",
+  "Scoring brief quality",
 ];
 
 interface StepEvent {
