@@ -1,7 +1,7 @@
 import { getPrisma } from "../lib/db";
 import { phases as fallbackPhases } from "../data";
-import { DashboardShell } from "../components/DashboardShell";
 import type { PhaseData } from "../lib/types";
+import { DashboardClient } from "../components/DashboardClient";
 
 async function getPhases(): Promise<PhaseData[]> {
   try {
@@ -20,11 +20,5 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const phases = await getPhases();
-
-  return (
-    <div>
-      <h2 className="text-xl font-bold mb-6">Progress Dashboard</h2>
-      <DashboardShell initialPhases={phases} />
-    </div>
-  );
+  return <DashboardClient phases={phases} />;
 }

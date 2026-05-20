@@ -2,13 +2,27 @@ import { LoginForm } from "../components/LoginForm";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
-      <div className="text-center space-y-8">
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ background: "var(--bg)", color: "var(--text-1)" }}
+    >
+      <div className="text-center" style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "center" }}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">LNM Platform</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Multi-Agent SEO Ecosystem
-          </p>
+          <div
+            className="inline-flex items-center justify-center rounded-[10px] mb-4"
+            style={{
+              width: 48,
+              height: 48,
+              background: "var(--accent)",
+              fontWeight: 700,
+              fontSize: 18,
+              color: "white",
+            }}
+          >
+            LN
+          </div>
+          <h1 className="h1" style={{ fontSize: 24 }}>LNM Platform</h1>
+          <p className="text-sm muted mt-1">Multi-Agent SEO Ecosystem</p>
         </div>
         <LoginForm />
       </div>
