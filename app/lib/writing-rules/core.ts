@@ -92,3 +92,66 @@ You MUST follow every rule below when writing content. These rules are non-negot
 export function getCoreRules(): string {
   return CORE_SEMANTIC_RULES;
 }
+
+// ── Page-type-aware rule layers ──
+
+export type PageType =
+  | "service"
+  | "location"
+  | "comparison"
+  | "guide"
+  | "review"
+  | "blog"
+  | "landing";
+
+const CO_OCCURRENCE_RULES = `## Co-Occurrence Rules
+- Always pair region + service inside headings, opening paragraphs, tables, FAQs, and CTAs.
+- The service entity must not appear in isolation on pages with local intent.
+- Include main co-occurrence phrase, 3-5 supporting co-occurrence variations, region-specific context, and service-specific context.`;
+
+const NAMED_ENTITY_RULES = `## Named Entity Expansion Rules
+- Add named entities from: laws, statutes, courts, government agencies, hospitals, universities, researchers, local roads, sub-locations, counties, cities, addresses, legal organizations, public health organizations, crash data sources, medical data sources.
+- Each named entity must serve one clear purpose: legal clarity, local relevance, medical relevance, or trust signal.
+- Do not add named entities randomly. Verify factual accuracy before inclusion.
+- Place named entities in headings, subordinate text, tables, FAQs, and briefs where they increase topical or local relevance.`;
+
+const PERSPECTIVE_RULES = `## Perspective Rules
+- Complete the factual answer under each heading first.
+- Add 1 personalized perspective sentence after the heading text is completed.
+- Use different perspectives across sections: injured client, family member, attorney, medical provider, insurance adjuster, court, local community, legal service provider.
+- The perspective sentence must add non-commodity value: direct client understanding, local case awareness, outcome specificity, or process familiarity.`;
+
+const FORMAT_RULES = `## Format and Style Rules
+- End every sentence with a period. No colons, semicolons, or dashes as sentence terminators.
+- No abbreviations (e.g., i.e., etc.). Use plain wording.
+- No fancy or promotional wording: avoid "comprehensive legal advocacy", "unparalleled representation", "robust claim strategy", "navigating the complexities".
+- Use simple, direct terms: legal help, claim review, evidence collection, insurance negotiation, settlement review.
+- Include recent statistics (with year and source) when the topic benefits from data.
+- Use data from NHTSA, FHWA, CDC, state DOT, BLS, university research, or verified government publications.`;
+
+const ABOVE_THE_FOLD_RULES = `## Above-the-Fold Rules
+- The first section must include: main topic, location (if relevant), direct answer to the query, main concern, possible outcome or value, CTA (if commercial intent), and short trust statement.
+- Avoid long openings. The first paragraph proves relevance immediately.`;
+
+/**
+ * Page-type rule matrix: which extra rule layers apply to each page type.
+ */
+const PAGE_TYPE_RULES: Record<PageType, string[]> = {
+  service: [FORMAT_RULES, CO_OCCURRENCE_RULES, NAMED_ENTITY_RULES, PERSPECTIVE_RULES, ABOVE_THE_FOLD_RULES],
+  location: [FORMAT_RULES, CO_OCCURRENCE_RULES, NAMED_ENTITY_RULES, PERSPECTIVE_RULES, ABOVE_THE_FOLD_RULES],
+  comparison: [FORMAT_RULES, ABOVE_THE_FOLD_RULES],
+  guide: [FORMAT_RULES, ABOVE_THE_FOLD_RULES],
+  review: [FORMAT_RULES, NAMED_ENTITY_RULES, ABOVE_THE_FOLD_RULES],
+  blog: [FORMAT_RULES],
+  landing: [FORMAT_RULES, CO_OCCURRENCE_RULES, ABOVE_THE_FOLD_RULES],
+};
+
+/**
+ * Returns page-type-aware rules composed on top of core rules.
+ * SERVICE/LOCATION pages get co-occurrence + named entity + perspective rules.
+ * All types get core + format rules.
+ */
+export function getRulesForPageType(pageType: PageType): string {
+  const layers = PAGE_TYPE_RULES[pageType] ?? PAGE_TYPE_RULES.blog;
+  return [CORE_SEMANTIC_RULES, ...layers].join("\n\n");
+}

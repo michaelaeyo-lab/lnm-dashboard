@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "../lib/session";
 import { Sidebar } from "../components/Sidebar";
+import { Topbar } from "../components/Topbar";
 
 export default async function DashboardLayout({
   children,
@@ -13,7 +14,10 @@ export default async function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar user={user} />
-      <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Topbar />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+      </div>
     </div>
   );
 }
