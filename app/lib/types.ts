@@ -330,6 +330,11 @@ export interface HeadingValidation {
 }
 
 // Step 12: Quality Report
+export interface GoldStandardCrossRef {
+  score: number; // 0-100
+  checks: Record<string, "PASS" | "WARN">;
+}
+
 export interface BriefQualityReport {
   overallScore: number;
   breakdown: {
@@ -341,6 +346,7 @@ export interface BriefQualityReport {
   };
   knowledgeGaps: string[];
   recommendations: string[];
+  goldStandardCrossRef?: GoldStandardCrossRef;
 }
 
 export interface BriefData {

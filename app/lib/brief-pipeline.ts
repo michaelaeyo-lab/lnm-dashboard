@@ -42,6 +42,7 @@ import type {
   TitleTagData,
   HeadingValidation,
   BriefQualityReport,
+  GoldStandardCrossRef,
 } from "./types";
 
 function getOpenAI() {
@@ -245,6 +246,329 @@ async function getStepMethodologyContext(stepNum: number, topicContext?: string)
   }
 }
 
+// --- Step-Level Output Validation ---
+
+interface StepValidationResult {
+  valid: boolean;
+  missing: string[];
+}
+
+/**
+ * Validate that a pipeline step produced the artifacts the methodology requires.
+ * Returns { valid, missing[] }. Logs PASS or WARN per step.
+ */
+function validateStepOutput(stepNum: number, output: unknown): StepValidationResult {
+  const missing: string[] = [];
+  const o = output as Record<string, unknown>;
+
+  switch (stepNum) {
+    case 4: {
+      // Query Pre-Analysis
+      if (!o.searchIntent || typeof o.searchIntent !== "string" || o.searchIntent.trim() === "")
+        missing.push("searchIntent");
+      if (!o.queryType || typeof o.queryType !== "string" || o.queryType.trim() === "")
+        missing.push("queryType");
+      const aud = o.audienceSegments as Record<string, unknown> | undefined;
+      if (!aud || !aud.primary || typeof aud.primary !== "string" || (aud.primary as string).trim() === "")
+        missing.push("audienceSegments.primary");
+      if (!o.businessModel || typeof o.businessModel !== "string" || o.businessModel.trim() === "")
+        missing.push("businessModel");
+      break;
+    }
+
+    case 5: {
+      // SERP Analysis
+      const cc = o.consensusCoverage;
+      if (!Array.isArray(cc) || cc.length < 1)
+        missing.push("consensusCoverage (need ≥1 item)");
+      if (!o.serpFeaturePresence || typeof o.serpFeaturePresence !== "object")
+        missing.push("serpFeaturePresence");
+      break;
+    }
+
+    case 6: {
+      // Deep Competitor Analysis — deep checks per Sardar's methodology
+      const comps = (o.competitors as Record<string, unknown>[]) || [];
+      if (comps.length === 0) {
+        missing.push("competitors (empty array)");
+      } else {
+        for (const comp of comps) {
+          const title = (comp.title as string) || "unknown";
+          const depthIssues: string[] = [];
+
+          // headingDepth must be an object with real breakdown
+          const hd = comp.headingDepth as Record<string, unknown> | undefined;
+          if (!hd || typeof hd !== "object") {
+            depthIssues.push("headingDepth missing");
+          } else {
+            const maxD = (hd.maxDepth as number) || 0;
+            if (maxD <= 0) depthIssues.push("headingDepth.maxDepth ≤ 0");
+          }
+
+          // contentDesignPatterns: ≥2 unique, not just "paragraph" repeated
+          const patterns = (comp.contentDesignPatterns as string[]) || [];
+          const uniquePatterns = new Set(patterns.map((p) => p.toLowerCase().trim()));
+          if (uniquePatterns.size < 2)
+            depthIssues.push(`contentDesignPatterns has <2 unique patterns (got ${uniquePatterns.size})`);
+
+          // strengths: ≥2 items, each ≥10 chars
+          const strengths = (comp.strengths as string[]) || [];
+          const validStrengths = strengths.filter((s) => typeof s === "string" && s.trim().length >= 10);
+          if (validStrengths.length < 2)
+            depthIssues.push(`strengths has <2 substantive items (got ${validStrengths.length})`);
+
+          // weaknesses: ≥2 items, each ≥10 chars
+          const weaknesses = (comp.weaknesses as string[]) || [];
+          const validWeaknesses = weaknesses.filter((s) => typeof s === "string" && s.trim().length >= 10);
+          if (validWeaknesses.length < 2)
+            depthIssues.push(`weaknesses has <2 substantive items (got ${validWeaknesses.length})`);
+
+          // topicalArchitecture or headingAnalysis with real structure data
+          const tArch = (comp.topicalArchitecture as string[]) || [];
+          if (tArch.length === 0)
+            depthIssues.push("topicalArchitecture empty (no structure data)");
+
+          if (depthIssues.length >= 2) {
+            missing.push(`Competitor '${title}' analysis lacks depth — missing: ${depthIssues.join(", ")}`);
+          }
+        }
+      }
+
+      // crossCompetitorEntities ≥3
+      const cce = (o.crossCompetitorEntities as string[]) || [];
+      if (cce.length < 3)
+        missing.push(`crossCompetitorEntities (need ≥3, got ${cce.length})`);
+
+      // gapKeywords field must exist (even if empty)
+      if (!("gapKeywords" in o))
+        missing.push("gapKeywords field missing");
+      break;
+    }
+
+    case 7: {
+      // Contextual Vectors + Entities + Topical Map
+      const cv = (o.contextualVectors as string[]) || [];
+      if (cv.length < 5)
+        missing.push(`contextualVectors (need ≥5, got ${cv.length})`);
+      const em = (o.entityMap as unknown[]) || [];
+      if (em.length < 3)
+        missing.push(`entityMap (need ≥3, got ${em.length})`);
+      const tm = (o.topicalMap as unknown[]) || [];
+      if (tm.length < 3)
+        missing.push(`topicalMap (need ≥3, got ${tm.length})`);
+      break;
+    }
+
+    case 8: {
+      // Heading Hierarchy
+      const hdgs = (o.headings as Array<{ level: number; text: string }>) || [];
+      if (hdgs.length < 10)
+        missing.push(`headings (need ≥10, got ${hdgs.length})`);
+      if (hdgs.length > 0 && hdgs[0].level !== 1)
+        missing.push("first heading is not H1");
+      const h1s = hdgs.filter((h) => h.level === 1);
+      if (h1s.length !== 1)
+        missing.push(`exactly 1 H1 required (got ${h1s.length})`);
+      // Check valid nesting (no level skips)
+      for (let i = 1; i < hdgs.length; i++) {
+        if (hdgs[i].level > hdgs[i - 1].level + 1) {
+          missing.push(`nesting skip at heading ${i}: H${hdgs[i - 1].level} → H${hdgs[i].level}`);
+          break; // only report first
+        }
+      }
+      break;
+    }
+
+    case 9: {
+      // Structure + Queries
+      const h9 = (o.headings as Array<Record<string, unknown>>) || [];
+      for (const h of h9) {
+        const level = h.level as number;
+        const text = (h.text as string) || "";
+        const tq = (h.targetQueries as unknown[]) || [];
+        if ((level === 1 || level === 2) && tq.length < 1)
+          missing.push(`H${level} "${text.slice(0, 40)}" has 0 targetQueries`);
+        if (!h.structurePattern || (h.structurePattern as string).trim() === "")
+          missing.push(`"${text.slice(0, 40)}" missing structurePattern`);
+        if (!h.structureInstructions || (h.structureInstructions as string).trim() === "")
+          missing.push(`"${text.slice(0, 40)}" missing structureInstructions`);
+      }
+      // Cap missing array to avoid log flooding
+      if (missing.length > 8) {
+        const extra = missing.length - 5;
+        missing.length = 5;
+        missing.push(`... and ${extra} more`);
+      }
+      break;
+    }
+
+    case 10: {
+      // Connections
+      const conns = (o.connections as unknown[]) || [];
+      if (conns.length < 2)
+        missing.push(`connections (need ≥2, got ${conns.length})`);
+      else {
+        for (const c of conns as Record<string, unknown>[]) {
+          if (!c.fromHeading || (c.fromHeading as string).trim() === "")
+            { missing.push("a connection missing fromHeading"); break; }
+          if (!c.toPage || (c.toPage as string).trim() === "")
+            { missing.push("a connection missing toPage"); break; }
+          if (!c.anchorText || (c.anchorText as string).trim() === "")
+            { missing.push("a connection missing anchorText"); break; }
+        }
+      }
+      break;
+    }
+
+    case 11: {
+      // Heading Validation
+      if (typeof o.score !== "number" || o.score < 1 || o.score > 10)
+        missing.push(`score must be 1-10 (got ${o.score})`);
+      if (!Array.isArray(o.issues))
+        missing.push("issues must be an array");
+      break;
+    }
+
+    case 12: {
+      // Quality Scoring
+      if (typeof o.overallScore !== "number" || o.overallScore < 0 || o.overallScore > 100)
+        missing.push(`overallScore must be 0-100 (got ${o.overallScore})`);
+      const bd = o.breakdown as Record<string, unknown> | undefined;
+      const dims = ["competitorCoverage", "intentSatisfaction", "semanticCoherence", "entityCompleteness", "headingQuality"];
+      if (!bd) {
+        missing.push("breakdown missing entirely");
+      } else {
+        for (const d of dims) {
+          const v = bd[d];
+          if (typeof v !== "number" || v < 0 || v > 100)
+            missing.push(`breakdown.${d} must be 0-100 (got ${v})`);
+        }
+      }
+      break;
+    }
+  }
+
+  const valid = missing.length === 0;
+  if (valid) {
+    console.log(`[Validation Step ${stepNum}] PASS`);
+  } else {
+    console.log(`[Validation Step ${stepNum}] WARN: missing ${missing.join(", ")}`);
+  }
+  return { valid, missing };
+}
+
+// --- Gold-Standard Cross-Reference (programmatic, no GPT-4o) ---
+
+/**
+ * Compare a generated brief against gold-standard briefs from category 19.
+ * Returns a cross-reference score (0-100) with per-dimension PASS/WARN.
+ */
+async function crossReferenceGoldStandard(
+  brief: EnhancedBrief,
+  topic: string,
+  pageType: string
+): Promise<GoldStandardCrossRef> {
+  const checks: Record<string, "PASS" | "WARN"> = {};
+  let passCount = 0;
+
+  try {
+    const goldBriefs = await retrieveSimilarBriefs(topic, pageType, 3);
+
+    if (goldBriefs.length === 0) {
+      console.log("[Gold-Standard Cross-Ref] No gold-standard briefs found — skipping");
+      return { score: 50, checks: { heading_count: "WARN", query_density: "WARN", pattern_diversity: "WARN", entity_density: "WARN" } };
+    }
+
+    // Parse gold-standard heading counts from brief content
+    // Gold briefs are markdown — count lines starting with H (e.g., "| H1 |", "| H2 |", "## ")
+    const goldHeadingCounts: number[] = [];
+    const goldQueryCounts: number[] = [];
+    const goldEntityCounts: number[] = [];
+    for (const gb of goldBriefs) {
+      const lines = gb.content.split("\n");
+      const headingLines = lines.filter(
+        (l) => /\|\s*H[1-4]\s*\|/.test(l) || /^#{1,4}\s/.test(l.trim())
+      );
+      goldHeadingCounts.push(Math.max(headingLines.length, 1));
+
+      // Count query references (lines with volume numbers or "Queries" mentions)
+      const queryLines = lines.filter(
+        (l) => /\d+\s*\/mo|\bvolume\b|\bqueries?\b/i.test(l)
+      );
+      goldQueryCounts.push(queryLines.length);
+
+      // Count entity-like mentions
+      const entityLines = lines.filter(
+        (l) => /\bentit(y|ies)\b|\bprimary\b|\bsecondary\b|\bcontextual\b/i.test(l)
+      );
+      goldEntityCounts.push(entityLines.length);
+    }
+
+    // --- Dimension 1: Heading count similarity (±30% of average) ---
+    const avgGoldHeadings = goldHeadingCounts.reduce((a, b) => a + b, 0) / goldHeadingCounts.length;
+    const briefHeadingCount = brief.headings.length;
+    const headingRatio = briefHeadingCount / Math.max(avgGoldHeadings, 1);
+    if (headingRatio >= 0.7 && headingRatio <= 1.3) {
+      checks.heading_count = "PASS";
+      passCount++;
+    } else {
+      checks.heading_count = "WARN";
+    }
+
+    // --- Dimension 2: Query density (queries per heading, ±20% of gold avg) ---
+    const briefTotalQueries = brief.headings.reduce(
+      (sum, h) => sum + (h.targetQueries?.length || 0), 0
+    );
+    const briefQueryDensity = briefTotalQueries / Math.max(briefHeadingCount, 1);
+    // Estimate gold query density from counts
+    const avgGoldQueryCount = goldQueryCounts.reduce((a, b) => a + b, 0) / goldQueryCounts.length;
+    const avgGoldQueryDensity = avgGoldQueryCount / Math.max(avgGoldHeadings, 1);
+    const goldQD = Math.max(avgGoldQueryDensity, 0.5); // floor at 0.5
+    const qDensityRatio = briefQueryDensity / goldQD;
+    if (qDensityRatio >= 0.8 && qDensityRatio <= 1.2) {
+      checks.query_density = "PASS";
+      passCount++;
+    } else {
+      checks.query_density = "WARN";
+    }
+
+    // --- Dimension 3: Structure pattern diversity (≥3 unique patterns) ---
+    const uniquePatterns = new Set(
+      brief.headings
+        .map((h) => h.structurePattern || h.contentDesignPattern)
+        .filter(Boolean)
+    );
+    if (uniquePatterns.size >= 3) {
+      checks.pattern_diversity = "PASS";
+      passCount++;
+    } else {
+      checks.pattern_diversity = "WARN";
+    }
+
+    // --- Dimension 4: Entity density (entities per heading, ±30% of gold) ---
+    const briefEntityDensity = brief.entityMap.length / Math.max(briefHeadingCount, 1);
+    const avgGoldEntityCount = goldEntityCounts.reduce((a, b) => a + b, 0) / goldEntityCounts.length;
+    const goldEntityDensity = avgGoldEntityCount / Math.max(avgGoldHeadings, 1);
+    const goldED = Math.max(goldEntityDensity, 0.3); // floor at 0.3
+    const entityRatio = briefEntityDensity / goldED;
+    if (entityRatio >= 0.7 && entityRatio <= 1.3) {
+      checks.entity_density = "PASS";
+      passCount++;
+    } else {
+      checks.entity_density = "WARN";
+    }
+
+    const score = Math.round((passCount / 4) * 100);
+    const checkSummary = Object.entries(checks).map(([k, v]) => `${k}: ${v}`).join(" | ");
+    console.log(`[Gold-Standard Cross-Ref] Score: ${score}/100 | ${checkSummary}`);
+
+    return { score, checks };
+  } catch (err) {
+    console.warn("[Gold-Standard Cross-Ref] Failed, proceeding without:", err);
+    return { score: 0, checks: { heading_count: "WARN", query_density: "WARN", pattern_diversity: "WARN", entity_density: "WARN" } };
+  }
+}
+
 // --- Pipeline ---
 
 /**
@@ -306,6 +630,8 @@ export async function generateBrief(
           stepQueryPreAnalysis(params, keywordData, competitorDataset),
           stepSerpAnalysis(keywordData, competitorDataset, params.topic),
         ]);
+        validateStepOutput(4, queryPreAnalysis);
+        validateStepOutput(5, serpAnalysis);
         sendEvent({ step: 4, label: "Intent analyzed", progress: 0.37 });
         sendEvent({ step: 5, label: "SERP patterns analyzed", progress: 0.37 });
 
@@ -314,6 +640,7 @@ export async function generateBrief(
           keywordData,
           competitorDataset
         );
+        validateStepOutput(6, deepCompetitors);
         sendEvent({ step: 6, label: "Competitors analyzed", progress: 0.50 });
 
         // ============================================================
@@ -330,6 +657,7 @@ export async function generateBrief(
             serpAnalysis,
             deepCompetitors
           );
+        validateStepOutput(7, { contextualVectors, entityMap, topicalMap });
         sendEvent({ step: 7, label: "Vectors mapped", progress: 0.58 });
 
         sendEvent({ step: 8, label: "Building heading hierarchy & title...", progress: 0.60 });
@@ -343,6 +671,7 @@ export async function generateBrief(
           serpAnalysis,
           deepCompetitors
         );
+        validateStepOutput(8, { headings: rawHeadings });
         sendEvent({ step: 8, label: "Hierarchy built", progress: 0.68 });
 
         sendEvent({ step: 9, label: "Generating structure & mapping queries...", progress: 0.70 });
@@ -352,6 +681,7 @@ export async function generateBrief(
           keywordData,
           deepCompetitors
         );
+        validateStepOutput(9, { headings });
         sendEvent({ step: 9, label: "Structure complete", progress: 0.78 });
 
         sendEvent({ step: 10, label: "Mapping internal connections...", progress: 0.80 });
@@ -360,6 +690,7 @@ export async function generateBrief(
           headings,
           topicalMap
         );
+        validateStepOutput(10, { connections: connectionMap });
         sendEvent({ step: 10, label: "Connections mapped", progress: 0.85 });
 
         // ── Rule compliance pass (Sardar's refinement step) ──
@@ -388,6 +719,8 @@ export async function generateBrief(
             params.topic
           ),
         ]);
+        validateStepOutput(11, headingValidation);
+        validateStepOutput(12, qualityReport);
         sendEvent({ step: 11, label: "Headings validated", progress: 0.95 });
         sendEvent({ step: 12, label: "Brief scored", progress: 0.98 });
 
@@ -400,6 +733,17 @@ export async function generateBrief(
           corrected &&
           corrected.length >= Math.max(headings.length * 0.6, 5);
         const finalHeadings = useCorrected ? corrected : headings;
+
+        // ============================================================
+        // GOLD-STANDARD CROSS-REFERENCE (programmatic, after Step 12)
+        // ============================================================
+
+        const goldStandardCrossRef = await crossReferenceGoldStandard(
+          { contextualVectors, headings: finalHeadings, entityMap, connectionMap, competitors: [], knowledgeGaps: qualityReport.knowledgeGaps },
+          params.topic,
+          params.pageType
+        );
+        qualityReport.goldStandardCrossRef = goldStandardCrossRef;
 
         // Build competitors list from keyword data
         const competitors: CompetitorEntry[] =
