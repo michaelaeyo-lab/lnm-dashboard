@@ -78,15 +78,16 @@ export function KeywordUpload({
     onKeywords([]);
   }
 
-  const inputCls =
-    "w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-blue-500";
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <label className="block text-xs text-zinc-400">Manual Keywords (CSV)</label>
+        <label className="block text-xs" style={{ color: "var(--text-2)" }}>Manual Keywords (CSV)</label>
         {parsed && parsed.length > 0 && (
-          <button onClick={handleClear} className="text-xs text-zinc-500 hover:text-red-400">
+          <button
+            onClick={handleClear}
+            className="text-xs transition-colors"
+            style={{ color: "var(--text-3)" }}
+          >
             Clear
           </button>
         )}
@@ -94,12 +95,15 @@ export function KeywordUpload({
 
       {/* File upload */}
       <div className="flex gap-2 items-center">
-        <label className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs rounded-lg cursor-pointer transition-colors">
+        <label
+          className="px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors"
+          style={{ background: "var(--surface)", color: "var(--text-1)" }}
+        >
           Upload CSV
           <input type="file" accept=".csv,.tsv,.txt" onChange={handleFileUpload} className="hidden" />
         </label>
-        {fileName && <span className="text-xs text-zinc-500">{fileName}</span>}
-        <span className="text-xs text-zinc-600">or paste below</span>
+        {fileName && <span className="text-xs" style={{ color: "var(--text-3)" }}>{fileName}</span>}
+        <span className="text-xs" style={{ color: "var(--text-3)" }}>or paste below</span>
       </div>
 
       {/* Text input */}
@@ -111,40 +115,47 @@ export function KeywordUpload({
         }}
         placeholder={"keyword, volume, intent\nmoving company bristol, 2400, commercial\nhow to move house, 1900, informational"}
         rows={4}
-        className={`${inputCls} resize-y font-mono text-xs`}
+        className="w-full px-3 py-2 rounded-lg text-xs font-mono resize-y"
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          color: "var(--text-1)",
+          outline: "none",
+        }}
       />
 
       {!parsed && rawText.trim() && (
         <button
           onClick={() => handleParse(rawText)}
-          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs rounded-lg transition-colors"
+          className="px-3 py-1.5 text-xs rounded-lg transition-colors"
+          style={{ background: "var(--surface)", color: "var(--text-1)" }}
         >
           Parse Keywords
         </button>
       )}
 
       {parsed && parsed.length > 0 && (
-        <div className="bg-zinc-800/50 rounded-lg p-3 max-h-40 overflow-y-auto">
-          <p className="text-xs text-zinc-400 mb-2">
+        <div className="rounded-lg p-3 max-h-40 overflow-y-auto" style={{ background: "var(--surface)" }}>
+          <p className="text-xs mb-2" style={{ color: "var(--text-2)" }}>
             {parsed.length} keyword{parsed.length !== 1 ? "s" : ""} loaded
           </p>
           <div className="space-y-1">
             {parsed.slice(0, 20).map((k, i) => (
               <div key={i} className="flex items-center gap-3 text-xs">
-                <span className="text-zinc-300 flex-1 truncate">{k.query}</span>
-                <span className="text-zinc-500 w-16 text-right">{k.volume.toLocaleString()}/mo</span>
-                <span className="text-zinc-600 w-20">{k.intent}</span>
+                <span className="flex-1 truncate" style={{ color: "var(--text-2)" }}>{k.query}</span>
+                <span className="w-16 text-right" style={{ color: "var(--text-3)" }}>{k.volume.toLocaleString()}/mo</span>
+                <span className="w-20" style={{ color: "var(--text-3)" }}>{k.intent}</span>
               </div>
             ))}
             {parsed.length > 20 && (
-              <p className="text-xs text-zinc-600 mt-1">...and {parsed.length - 20} more</p>
+              <p className="text-xs mt-1" style={{ color: "var(--text-3)" }}>...and {parsed.length - 20} more</p>
             )}
           </div>
         </div>
       )}
 
       {parsed && parsed.length === 0 && rawText.trim() && (
-        <p className="text-xs text-yellow-400">
+        <p className="text-xs" style={{ color: "oklch(0.8 0.15 85)" }}>
           No keywords found. Format: one keyword per line — &quot;keyword, volume, intent&quot;
         </p>
       )}

@@ -54,7 +54,12 @@ export function GenerationHistory() {
             setAgentType(e.target.value);
             setPage(1);
           }}
-          className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 text-sm"
+          className="px-3 py-1.5 rounded text-sm"
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            color: "var(--text-2)",
+          }}
         >
           {AGENT_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -62,13 +67,13 @@ export function GenerationHistory() {
             </option>
           ))}
         </select>
-        <span className="text-sm text-zinc-500">{total} generations</span>
+        <span className="text-sm" style={{ color: "var(--text-3)" }}>{total} generations</span>
       </div>
 
       {loading ? (
-        <div className="text-zinc-500 text-sm animate-pulse">Loading...</div>
+        <div className="text-sm animate-pulse" style={{ color: "var(--text-3)" }}>Loading...</div>
       ) : generations.length === 0 ? (
-        <div className="text-zinc-500 text-sm">
+        <div className="text-sm" style={{ color: "var(--text-3)" }}>
           No generations yet. Start a chat to create one.
         </div>
       ) : (
@@ -76,7 +81,8 @@ export function GenerationHistory() {
           {generations.map((gen) => (
             <div
               key={gen.id}
-              className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg overflow-hidden"
+              className="rounded-lg overflow-hidden"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
             >
               <button
                 onClick={() =>
@@ -85,22 +91,26 @@ export function GenerationHistory() {
                 className="w-full px-4 py-3 text-left flex items-center justify-between"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-zinc-200 truncate">
+                  <div className="text-sm truncate" style={{ color: "var(--text-1)" }}>
                     {gen.inputPrompt}
                   </div>
                   <div className="flex gap-2 mt-1">
-                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-700 text-zinc-300">
+                    <span
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ background: "var(--bg-elev)", color: "var(--text-2)" }}
+                    >
                       {gen.agentType}
                     </span>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs" style={{ color: "var(--text-3)" }}>
                       {new Date(gen.createdAt).toLocaleString()}
                     </span>
                   </div>
                 </div>
                 <svg
-                  className={`w-4 h-4 text-zinc-500 transition-transform ${
+                  className={`w-4 h-4 transition-transform ${
                     expandedId === gen.id ? "rotate-180" : ""
                   }`}
+                  style={{ color: "var(--text-3)" }}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -115,8 +125,11 @@ export function GenerationHistory() {
               </button>
 
               {expandedId === gen.id && (
-                <div className="px-4 pb-4 border-t border-zinc-700/50">
-                  <div className="mt-3 text-sm text-zinc-300 whitespace-pre-wrap max-h-96 overflow-y-auto">
+                <div className="px-4 pb-4" style={{ borderTop: "1px solid var(--border)" }}>
+                  <div
+                    className="mt-3 text-sm whitespace-pre-wrap max-h-96 overflow-y-auto"
+                    style={{ color: "var(--text-2)" }}
+                  >
                     {gen.output}
                   </div>
                 </div>
@@ -131,17 +144,19 @@ export function GenerationHistory() {
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-3 py-1 text-sm bg-zinc-800 rounded disabled:opacity-50 text-zinc-300"
+            className="px-3 py-1 text-sm rounded disabled:opacity-50"
+            style={{ background: "var(--surface)", color: "var(--text-2)" }}
           >
             Prev
           </button>
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm" style={{ color: "var(--text-3)" }}>
             Page {page} of {totalPages}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="px-3 py-1 text-sm bg-zinc-800 rounded disabled:opacity-50 text-zinc-300"
+            className="px-3 py-1 text-sm rounded disabled:opacity-50"
+            style={{ background: "var(--surface)", color: "var(--text-2)" }}
           >
             Next
           </button>

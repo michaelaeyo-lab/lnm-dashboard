@@ -328,10 +328,8 @@ export function ContentWriter() {
     );
   }
 
-  // ── New session (pass-through to existing BriefForm/BriefImport) ──
+  // ── New session ──
   if (showNew && !activeSession) {
-    const { BriefForm } = require("./BriefForm");
-    const { BriefImport } = require("./BriefImport");
     return <NewSessionView onBack={() => setShowNew(false)} onSubmit={createSession} />;
   }
 
@@ -774,16 +772,39 @@ function NewSessionView({
     }
   }
 
-  // Lazy-load sub-components to avoid circular dep issues
-  let FormComponent: React.ComponentType<{ onSubmit: (b: ContentBrief) => void; loading: boolean }>;
-  let ImportComponent: React.ComponentType<{ onSubmit: (b: ContentBrief) => void; loading: boolean }>;
-  try {
-    FormComponent = require("./BriefForm").BriefForm;
-    ImportComponent = require("./BriefImport").BriefImport;
-  } catch {
-    return (
-      <Empty icon="alert" title="Form components not found" sub="BriefForm or BriefImport missing." />
-    );
+  // Inline quick form state
+  const [formTopic, setFormTopic] = useState("");
+  const [formKeyword, setFormKeyword] = useState("");
+  const [importText, setImportText] = useState("");
+
+  function handleQuickForm() {
+    if (!formTopic.trim()) return;
+    const brief: ContentBrief = {
+      pageType: "blog",
+      niche: formKeyword.trim() || formTopic.trim(),
+      topic: formTopic.trim(),
+      headings: [{ text: formTopic.trim(), level: 1, intent: "informational" }],
+      source: "form",
+    };
+    handleSubmit(brief);
+  }
+
+  function handleImport() {
+    if (!importText.trim()) return;
+    const lines = importText.split("\n").map((l) => l.trim()).filter(Boolean);
+    const headings: ContentBrief["headings"] = lines.map((line) => {
+      const match = line.match(/^(#{1,6})\s+(.+)/);
+      if (match) return { text: match[2], level: Math.min(match[1].length, 4) as 1|2|3|4, intent: "informational" };
+      return { text: line.replace(/^\d+\.\s*/, ""), level: 2 as const, intent: "informational" };
+    });
+    const brief: ContentBrief = {
+      pageType: "blog",
+      niche: headings[0]?.text || "",
+      topic: headings[0]?.text || "Imported content",
+      headings,
+      source: "import",
+    };
+    handleSubmit(brief);
   }
 
   return (
@@ -839,9 +860,50 @@ function NewSessionView({
       )}
 
       {inputMode === "form" ? (
-        <FormComponent onSubmit={handleSubmit} loading={creating} />
+        <div className="card card-pad space-y-4" style={{ maxWidth: 480 }}>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "var(--text-2)" }}>Topic</label>
+            <input
+              value={formTopic}
+              onChange={(e) => setFormTopic(e.target.value)}
+              placeholder="e.g. Moving company in Bristol"
+              className="w-full px-3 py-2 rounded-[var(--radius)] text-sm"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-1)", outline: "none" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "var(--text-2)" }}>Target keyword (optional)</label>
+            <input
+              value={formKeyword}
+              onChange={(e) => setFormKeyword(e.target.value)}
+              placeholder="e.g. moving company bristol"
+              className="w-full px-3 py-2 rounded-[var(--radius)] text-sm"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-1)", outline: "none" }}
+            />
+          </div>
+          <Button onClick={handleQuickForm} disabled={!formTopic.trim() || creating}>
+            {creating ? "Creating..." : "Create session"}
+          </Button>
+        </div>
       ) : (
-        <ImportComponent onSubmit={handleSubmit} loading={creating} />
+        <div className="card card-pad space-y-4" style={{ maxWidth: 580 }}>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "var(--text-2)" }}>
+              Paste outline (markdown headings or numbered list)
+            </label>
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder={"# Main Topic\n## First Section\n## Second Section\n### Subsection"}
+              rows={8}
+              className="w-full px-3 py-2 rounded-[var(--radius)] text-sm font-mono resize-y"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-1)", outline: "none" }}
+            />
+          </div>
+          <Button onClick={handleImport} disabled={!importText.trim() || creating}>
+            {creating ? "Creating..." : "Import & create session"}
+          </Button>
+        </div>
       )}
     </div>
   );

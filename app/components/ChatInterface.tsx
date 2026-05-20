@@ -114,18 +114,18 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col" style={{ height: "calc(100vh - 8rem)" }}>
       {/* Agent pool selector */}
       <div className="flex gap-2 mb-4 flex-wrap">
         {AGENT_POOLS.map((pool) => (
           <button
             key={pool.value}
             onClick={() => setAgentPool(pool.value)}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
-              agentPool === pool.value
-                ? "bg-blue-600 text-white"
-                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-            }`}
+            className="px-3 py-1 rounded text-sm transition-colors"
+            style={{
+              background: agentPool === pool.value ? "var(--accent)" : "var(--surface)",
+              color: agentPool === pool.value ? "white" : "var(--text-2)",
+            }}
           >
             {pool.label}
           </button>
@@ -135,7 +135,7 @@ export function ChatInterface() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4">
         {messages.length === 0 && (
-          <div className="text-center text-zinc-500 mt-20">
+          <div className="text-center mt-20" style={{ color: "var(--text-3)" }}>
             <p className="text-lg mb-2">Ask anything about SEO</p>
             <p className="text-sm">
               Powered by 14,130 knowledge chunks from Koray&apos;s resources
@@ -151,14 +151,14 @@ export function ChatInterface() {
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-lg px-4 py-3 text-sm whitespace-pre-wrap ${
-                msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-zinc-800 text-zinc-200"
-              }`}
+              className="max-w-[80%] rounded-lg px-4 py-3 text-sm whitespace-pre-wrap"
+              style={{
+                background: msg.role === "user" ? "var(--accent)" : "var(--surface)",
+                color: msg.role === "user" ? "white" : "var(--text-1)",
+              }}
             >
               {msg.content || (
-                <span className="text-zinc-500 animate-pulse">
+                <span className="animate-pulse" style={{ color: "var(--text-3)" }}>
                   Thinking...
                 </span>
               )}
@@ -176,12 +176,22 @@ export function ChatInterface() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about SEO strategies, technical SEO, content..."
           disabled={streaming}
-          className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+          className="flex-1 px-4 py-3 rounded-lg disabled:opacity-50"
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            color: "var(--text-1)",
+            outline: "none",
+          }}
         />
         <button
           type="submit"
           disabled={streaming || !input.trim()}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white rounded-lg transition-colors"
+          className="px-6 py-3 rounded-lg transition-colors disabled:opacity-50"
+          style={{
+            background: streaming || !input.trim() ? "var(--surface)" : "var(--accent)",
+            color: streaming || !input.trim() ? "var(--text-3)" : "white",
+          }}
         >
           {streaming ? "..." : "Send"}
         </button>

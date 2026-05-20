@@ -72,12 +72,22 @@ export function KnowledgeBrowser() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search the knowledge base..."
-            className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-zinc-100 focus:outline-none focus:border-blue-500"
+            className="flex-1 px-3 py-2 rounded"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text-1)",
+              outline: "none",
+            }}
           />
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white rounded transition-colors"
+            className="px-4 py-2 rounded transition-colors disabled:opacity-50"
+            style={{
+              background: loading || !query.trim() ? "var(--surface)" : "var(--accent)",
+              color: loading || !query.trim() ? "var(--text-3)" : "white",
+            }}
           >
             {loading ? "Searching..." : "Search"}
           </button>
@@ -87,7 +97,12 @@ export function KnowledgeBrowser() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 text-sm"
+            className="px-3 py-1.5 rounded text-sm"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              color: "var(--text-2)",
+            }}
           >
             {AGENT_POOLS.map((pool) => (
               <option key={pool.value} value={pool.value}>
@@ -96,7 +111,7 @@ export function KnowledgeBrowser() {
             ))}
           </select>
 
-          <label className="text-sm text-zinc-500 flex items-center gap-1">
+          <label className="text-sm flex items-center gap-1" style={{ color: "var(--text-3)" }}>
             Top
             <input
               type="number"
@@ -104,14 +119,19 @@ export function KnowledgeBrowser() {
               max={50}
               value={topK}
               onChange={(e) => setTopK(Number(e.target.value))}
-              className="w-14 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 text-sm"
+              className="w-14 px-2 py-1 rounded text-sm"
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                color: "var(--text-2)",
+              }}
             />
           </label>
         </div>
       </form>
 
       {searched && (
-        <div className="text-sm text-zinc-500">
+        <div className="text-sm" style={{ color: "var(--text-3)" }}>
           {results.length} result{results.length !== 1 ? "s" : ""}
         </div>
       )}
@@ -120,38 +140,48 @@ export function KnowledgeBrowser() {
         {results.map((chunk) => (
           <div
             key={chunk.id}
-            className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4 space-y-2"
+            className="rounded-lg p-4 space-y-2"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
           >
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-medium text-zinc-200 text-sm">
+              <h3 className="font-medium text-sm" style={{ color: "var(--text-1)" }}>
                 {chunk.title}
               </h3>
-              <span className="text-xs text-zinc-500 whitespace-nowrap">
+              <span className="text-xs whitespace-nowrap" style={{ color: "var(--text-3)" }}>
                 {(chunk.combinedScore * 100).toFixed(1)}%
               </span>
             </div>
 
-            <p className="text-sm text-zinc-400 line-clamp-4 whitespace-pre-wrap">
+            <p className="text-sm line-clamp-4 whitespace-pre-wrap" style={{ color: "var(--text-2)" }}>
               {chunk.content.slice(0, 500)}
               {chunk.content.length > 500 ? "..." : ""}
             </p>
 
             <div className="flex gap-2 flex-wrap">
-              <span className="text-xs px-2 py-0.5 rounded bg-zinc-700 text-zinc-300">
+              <span
+                className="text-xs px-2 py-0.5 rounded"
+                style={{ background: "var(--bg-elev)", color: "var(--text-2)" }}
+              >
                 {chunk.category}
               </span>
               {chunk.sourceType && (
-                <span className="text-xs px-2 py-0.5 rounded bg-zinc-700/50 text-zinc-400">
+                <span
+                  className="text-xs px-2 py-0.5 rounded"
+                  style={{ background: "var(--bg-elev)", color: "var(--text-2)" }}
+                >
                   {chunk.sourceType}
                 </span>
               )}
               {chunk.contentType && (
-                <span className="text-xs px-2 py-0.5 rounded bg-zinc-700/50 text-zinc-400">
+                <span
+                  className="text-xs px-2 py-0.5 rounded"
+                  style={{ background: "var(--bg-elev)", color: "var(--text-2)" }}
+                >
                   {chunk.contentType}
                 </span>
               )}
               {chunk.tokenCount && (
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs" style={{ color: "var(--text-3)" }}>
                   {chunk.tokenCount} tokens
                 </span>
               )}
