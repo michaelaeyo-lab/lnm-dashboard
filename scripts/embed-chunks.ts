@@ -56,6 +56,7 @@ const CATEGORIES = [
   "17-strategy-blueprints",
   "18-content-writing-rules",
   "19-brief-examples",
+  "20-brief-methodology",
 ];
 
 function sleep(ms: number): Promise<void> {

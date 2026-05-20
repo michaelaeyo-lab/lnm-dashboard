@@ -1,0 +1,1038 @@
+{
+  "contextualVectors": [
+    "home removal services overview",
+    "types of home removal services",
+    "choosing a home removal company",
+    "cost factors in home removals",
+    "successful home removal tips",
+    "Mo Transport service benefits",
+    "customer testimonials for Mo Transport",
+    "contact information for Mo Transport",
+    "comparison of home removal companies",
+    "environmental impact of home removals",
+    "innovative home removal solutions",
+    "local expertise in Bristol",
+    "residential moving challenges",
+    "pricing transparency in removals",
+    "homeowner relocation needs"
+  ],
+  "headings": [
+    {
+      "level": 1,
+      "text": "Comprehensive Home Removal Services in Bristol by Mo Transport",
+      "structureInstructions": "Summarize the entire document's contextual vectors in heading order using a representative paragraph. Cover all aspects of home removal services offered by Mo Transport in Bristol, including types of services, choosing the right company, cost factors, tips for success, innovative solutions, customer testimonials, and local expertise.",
+      "targetQueries": [
+        {
+          "query": "home removals",
+          "volume": 600,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "FS",
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "NER",
+        "TF-IDF",
+        "CO-OCC"
+      ],
+      "intent": "Provide an overview of Mo Transport's home removal services in Bristol.",
+      "wordCountTarget": 250,
+      "structurePattern": "purpose-summary",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Understanding Home Removal Services",
+      "structureInstructions": "Define home removal services with context-rich details, including what they entail and their importance for moving households.",
+      "targetQueries": [
+        {
+          "query": "home removal companies",
+          "volume": 70,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Explain what home removal services are and their significance.",
+      "wordCountTarget": 150,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "What is Home Removal?",
+      "structureInstructions": "Provide a clear definition of home removal, including the processes involved and its role in facilitating relocations.",
+      "targetQueries": [
+        {
+          "query": "house removal companies",
+          "volume": 450,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "FS"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Define the concept of home removal.",
+      "wordCountTarget": 120,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Types of Home Removal Services Offered",
+      "structureInstructions": "List and briefly describe the different types of home removal services offered by Mo Transport, such as packing, transportation, and unpacking.",
+      "targetQueries": [
+        {
+          "query": "household removals",
+          "volume": 100,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Enumerate the various home removal services available.",
+      "wordCountTarget": 300,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Choosing the Right Home Removal Company",
+      "structureInstructions": "Explain how to choose the right home removal company, focusing on critical evaluation criteria.",
+      "targetQueries": [
+        {
+          "query": "house removal company",
+          "volume": 100,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Guide readers on selecting a suitable home removal company.",
+      "wordCountTarget": 160,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Key Factors to Consider",
+      "structureInstructions": "List key factors to consider when choosing a home removal company, providing a brief explanation for each.",
+      "targetQueries": [
+        {
+          "query": "domestic removals",
+          "volume": 150,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Identify important considerations for selecting a removal company.",
+      "wordCountTarget": 250,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Why Choose Mo Transport?",
+      "structureInstructions": "Explain the advantages of choosing Mo Transport for home removal services, supported by evidence and testimonials.",
+      "targetQueries": [
+        {
+          "query": "home moving services",
+          "volume": 200,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Highlight the benefits of selecting Mo Transport for removals.",
+      "wordCountTarget": 200,
+      "structurePattern": "reasoning-based",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Cost Factors in Home Removals",
+      "structureInstructions": "Define the cost factors involved in home removals, including pricing transparency and comparisons.",
+      "targetQueries": [
+        {
+          "query": "house moving service",
+          "volume": 350,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Clarify the cost components of home removal services.",
+      "wordCountTarget": 150,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Understanding Pricing Transparency",
+      "structureInstructions": "Explain the importance of pricing transparency in home removal services and how it affects customer trust.",
+      "targetQueries": [
+        {
+          "query": "residential moving",
+          "volume": 150,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Discuss the significance of transparent pricing in removals.",
+      "wordCountTarget": 140,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Comparing Costs Among Companies",
+      "structureInstructions": "Compare the costs of home removal services among different companies, highlighting Mo Transport's competitive pricing.",
+      "targetQueries": [
+        {
+          "query": "house removal companies",
+          "volume": 450,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Provide a cost comparison of different removal companies.",
+      "wordCountTarget": 150,
+      "structurePattern": "comparison",
+      "contentDesignPattern": "comparison",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Tips for a Successful Home Removal",
+      "structureInstructions": "Provide a list of practical tips for ensuring a successful home removal, covering preparation, planning, and execution.",
+      "targetQueries": [
+        {
+          "query": "home removals",
+          "volume": 600,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Offer guidance for a smooth home removal process.",
+      "wordCountTarget": 300,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Preparation and Planning",
+      "structureInstructions": "List essential steps for preparing and planning a home removal, with a brief explanation for each step.",
+      "targetQueries": [
+        {
+          "query": "domestic removals",
+          "volume": 150,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Detail the preparation and planning steps for home removal.",
+      "wordCountTarget": 250,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "On the Day of the Move",
+      "structureInstructions": "Provide a checklist of actions to take on the day of the move to ensure everything goes smoothly.",
+      "targetQueries": [
+        {
+          "query": "household removals",
+          "volume": 100,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Guide readers on what to do on the moving day.",
+      "wordCountTarget": 200,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Innovative Home Removal Solutions",
+      "structureInstructions": "Define innovative solutions in home removal services, including eco-friendly practices and technological advancements.",
+      "targetQueries": [
+        {
+          "query": "home moving services",
+          "volume": 200,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Highlight innovative practices in the home removal industry.",
+      "wordCountTarget": 160,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Eco-Friendly Practices",
+      "structureInstructions": "List eco-friendly practices in home removal services, explaining their benefits and implementation.",
+      "targetQueries": [
+        {
+          "query": "house removal companies",
+          "volume": 450,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Discuss eco-friendly practices in the moving industry.",
+      "wordCountTarget": 200,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Technological Advancements in Moving",
+      "structureInstructions": "List technological advancements in the moving industry, detailing how they improve efficiency and customer experience.",
+      "targetQueries": [
+        {
+          "query": "house removal company",
+          "volume": 100,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Explain technological innovations in home removals.",
+      "wordCountTarget": 200,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Customer Testimonials for Mo Transport",
+      "structureInstructions": "Present a collection of customer testimonials for Mo Transport, highlighting customer satisfaction and service quality.",
+      "targetQueries": [
+        {
+          "query": "home removals",
+          "volume": 600,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Showcase customer feedback and satisfaction with Mo Transport.",
+      "wordCountTarget": 180,
+      "structurePattern": "paragraph",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Local Expertise and Challenges in Bristol",
+      "structureInstructions": "Define the local expertise required for home removals in Bristol and the unique challenges faced in the area.",
+      "targetQueries": [
+        {
+          "query": "house moving service",
+          "volume": 350,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Discuss the local expertise and challenges specific to Bristol.",
+      "wordCountTarget": 160,
+      "structurePattern": "explicit-definition",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 3,
+      "text": "Navigating Bristol's Unique Moving Challenges",
+      "structureInstructions": "List the unique moving challenges in Bristol and provide strategies for overcoming them.",
+      "targetQueries": [
+        {
+          "query": "home removal companies",
+          "volume": 70,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA",
+        "TF-IDF"
+      ],
+      "intent": "Identify and address the specific moving challenges in Bristol.",
+      "wordCountTarget": 200,
+      "structurePattern": "list-definition",
+      "contentDesignPattern": "list",
+      "snippetTarget": true,
+      "paaTarget": true
+    },
+    {
+      "level": 2,
+      "text": "Contact Information for Mo Transport",
+      "structureInstructions": "Provide detailed contact information for Mo Transport, including phone numbers, email addresses, and physical locations.",
+      "targetQueries": [
+        {
+          "query": "house removal company",
+          "volume": 100,
+          "intent": "commercial"
+        }
+      ],
+      "serpFeatures": [
+        "PAA"
+      ],
+      "ruleCodes": [
+        "FS",
+        "PAA"
+      ],
+      "intent": "Offer contact details for Mo Transport.",
+      "wordCountTarget": 100,
+      "structurePattern": "paragraph",
+      "contentDesignPattern": "paragraph",
+      "snippetTarget": false,
+      "paaTarget": false
+    }
+  ],
+  "entityMap": [
+    {
+      "entity": "Mo Transport",
+      "type": "organization",
+      "relevance": "primary"
+    },
+    {
+      "entity": "Bristol",
+      "type": "location",
+      "relevance": "primary"
+    },
+    {
+      "entity": "home removals",
+      "type": "service",
+      "relevance": "primary"
+    },
+    {
+      "entity": "house removal companies",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "house moving service",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "home moving services",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "residential moving",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "domestic removals",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "household removals",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "home removal companies",
+      "type": "service",
+      "relevance": "secondary"
+    },
+    {
+      "entity": "homeowners",
+      "type": "audience",
+      "relevance": "contextual"
+    },
+    {
+      "entity": "renters",
+      "type": "audience",
+      "relevance": "contextual"
+    },
+    {
+      "entity": "pricing",
+      "type": "attribute",
+      "relevance": "contextual"
+    },
+    {
+      "entity": "customer testimonials",
+      "type": "attribute",
+      "relevance": "contextual"
+    },
+    {
+      "entity": "contact information",
+      "type": "attribute",
+      "relevance": "contextual"
+    },
+    {
+      "entity": "environmental impact",
+      "type": "attribute",
+      "relevance": "contextual"
+    },
+    {
+      "entity": "innovative solutions",
+      "type": "attribute",
+      "relevance": "contextual"
+    }
+  ],
+  "connectionMap": [
+    {
+      "fromHeading": "Types of Home Removal Services Offered",
+      "toPage": "Types of Home Removal Services",
+      "anchorText": "Explore Different Types of Home Removal Services",
+      "reason": "To provide detailed information on the various types of home removal services available, enhancing the reader's understanding and options."
+    },
+    {
+      "fromHeading": "Key Factors to Consider",
+      "toPage": "Choosing a Home Removal Company",
+      "anchorText": "Learn How to Choose the Right Home Removal Company",
+      "reason": "To guide users in making informed decisions when selecting a home removal company, offering additional insights and criteria."
+    },
+    {
+      "fromHeading": "Understanding Pricing Transparency",
+      "toPage": "Cost Factors in Home Removals",
+      "anchorText": "Understand the Cost Factors in Home Removals",
+      "reason": "To provide a comprehensive overview of what influences home removal costs, aiding in budgeting and financial planning."
+    },
+    {
+      "fromHeading": "Eco-Friendly Practices",
+      "toPage": "Environmental Impact of Home Removals",
+      "anchorText": "Discover the Environmental Impact of Home Removals",
+      "reason": "To educate readers on the environmental considerations and practices in home removals, promoting sustainable choices."
+    },
+    {
+      "fromHeading": "Technological Advancements in Moving",
+      "toPage": "Innovative Home Removal Solutions",
+      "anchorText": "Explore Innovative Home Removal Solutions",
+      "reason": "To highlight cutting-edge technologies in the moving industry, showcasing Mo Transport's commitment to innovation."
+    },
+    {
+      "fromHeading": "Comparing Costs Among Companies",
+      "toPage": "Comparison of Home Removal Companies",
+      "anchorText": "Compare Home Removal Companies",
+      "reason": "To assist users in evaluating different companies based on cost and services, facilitating competitive analysis."
+    }
+  ],
+  "competitors": [],
+  "knowledgeGaps": [
+    "Detailed comparison of home removal companies",
+    "Environmental impact of home removals",
+    "Innovative home removal solutions"
+  ],
+  "queryPreAnalysis": {
+    "searchIntent": "commercial",
+    "queryType": "mid-tail",
+    "queryCompleteness": {
+      "isComplete": true,
+      "missingQualifiers": []
+    },
+    "audienceSegments": {
+      "primary": "homeowners in Bristol looking to move",
+      "secondary": "renters in Bristol planning to relocate",
+      "tertiary": "families and individuals seeking local moving services"
+    },
+    "businessModel": "local-service",
+    "intentSatisfactionThreshold": {
+      "depth": "moderate",
+      "description": "The content should provide detailed information about the services offered, pricing, and benefits of choosing Mo Transport for home removals in Bristol, along with customer testimonials and contact information."
+    },
+    "freshnessRequirement": "evergreen"
+  },
+  "serpAnalysis": {
+    "consensusCoverage": [
+      "What is home removal?",
+      "Types of home removal services",
+      "How to choose a home removal company",
+      "Cost factors in home removals",
+      "Tips for a successful home removal"
+    ],
+    "serpGaps": [
+      "Detailed comparison of home removal companies",
+      "Environmental impact of home removals",
+      "Innovative home removal solutions"
+    ],
+    "compressionPatterns": [
+      "Basic definitions of home removal",
+      "General tips for packing"
+    ],
+    "featuredSnippetOpportunities": [
+      {
+        "query": "What is home removal?",
+        "currentFormat": "paragraph",
+        "strategy": "Provide a concise definition with examples"
+      },
+      {
+        "query": "Types of home removal services",
+        "currentFormat": "list",
+        "strategy": "List and briefly describe each type of service"
+      }
+    ],
+    "aiOverviewPresence": false,
+    "serpFeaturePresence": {
+      "imagePack": false,
+      "video": false,
+      "maps": false,
+      "forums": false,
+      "paa": false,
+      "knowledgePanel": false
+    },
+    "autocompleteVariations": [
+      "home removals near me",
+      "home removals cost",
+      "home removals checklist",
+      "home removals tips",
+      "home removals companies"
+    ]
+  },
+  "deepCompetitorAnalysis": {
+    "competitors": [],
+    "crossCompetitorEntities": [],
+    "gapKeywords": []
+  },
+  "topicalMap": [
+    {
+      "topic": "Domestic Home Removal Service",
+      "relationship": "root",
+      "clusterLabel": "removal services"
+    },
+    {
+      "topic": "Types of Home Removal Services",
+      "relationship": "supporting",
+      "clusterLabel": "service types"
+    },
+    {
+      "topic": "Choosing a Home Removal Company",
+      "relationship": "supporting",
+      "clusterLabel": "company selection"
+    },
+    {
+      "topic": "Cost Factors in Home Removals",
+      "relationship": "supporting",
+      "clusterLabel": "pricing"
+    },
+    {
+      "topic": "Tips for a Successful Home Removal",
+      "relationship": "supporting",
+      "clusterLabel": "removal tips"
+    },
+    {
+      "topic": "Mo Transport Service Benefits",
+      "relationship": "adjacent",
+      "clusterLabel": "company benefits"
+    },
+    {
+      "topic": "Customer Testimonials for Mo Transport",
+      "relationship": "adjacent",
+      "clusterLabel": "customer feedback"
+    },
+    {
+      "topic": "Contact Information for Mo Transport",
+      "relationship": "adjacent",
+      "clusterLabel": "contact details"
+    },
+    {
+      "topic": "Comparison of Home Removal Companies",
+      "relationship": "downstream",
+      "suggestedPageType": "comparison",
+      "clusterLabel": "company comparison"
+    },
+    {
+      "topic": "Environmental Impact of Home Removals",
+      "relationship": "downstream",
+      "suggestedPageType": "informative",
+      "clusterLabel": "sustainability"
+    },
+    {
+      "topic": "Innovative Home Removal Solutions",
+      "relationship": "downstream",
+      "suggestedPageType": "informative",
+      "clusterLabel": "innovation"
+    }
+  ],
+  "titleTag": {
+    "titleTag": "Home Removal Services in Bristol | Mo Transport",
+    "contextualAttributes": [
+      "Local Expertise",
+      "Eco-Friendly Solutions",
+      "Transparent Pricing"
+    ],
+    "rationale": "The title tag focuses on the primary service location and provider, while highlighting unique attributes like local expertise, eco-friendly solutions, and transparent pricing to appeal to the target audience."
+  },
+  "headingValidation": {
+    "score": 7,
+    "issues": [
+      {
+        "headingIndex": 0,
+        "headingText": "# Comprehensive Home Removal Services in Bristol by Mo Transport",
+        "issueType": "missing-h1",
+        "severity": "high",
+        "description": "The page lacks an H1 heading, which is crucial for defining the main topic of the page.",
+        "suggestedFix": "Change the current heading to H1 to establish it as the main topic of the page."
+      },
+      {
+        "headingIndex": 1,
+        "headingText": "## Understanding Home Removal Services",
+        "issueType": "continuity-break",
+        "severity": "medium",
+        "description": "The transition from the overview to understanding home removal services is abrupt and lacks a logical connection.",
+        "suggestedFix": "Introduce a brief transition sentence or paragraph to connect the overview with the detailed explanation of home removal services."
+      },
+      {
+        "headingIndex": 3,
+        "headingText": "### Types of Home Removal Services Offered",
+        "issueType": "semantic-repetition",
+        "severity": "medium",
+        "description": "This heading overlaps with the intent of the previous heading, which already introduces home removal services.",
+        "suggestedFix": "Merge this heading with the previous one or refine it to focus on specific types of services offered by Mo Transport."
+      },
+      {
+        "headingIndex": 9,
+        "headingText": "### Comparing Costs Among Companies",
+        "issueType": "depth-regression",
+        "severity": "medium",
+        "description": "This heading does not go deeper into the topic of cost factors but rather shifts sideways to a comparison.",
+        "suggestedFix": "Incorporate this comparison into the broader discussion of cost factors or create a separate section for detailed cost comparisons."
+      },
+      {
+        "headingIndex": 13,
+        "headingText": "## Innovative Home Removal Solutions",
+        "issueType": "continuity-break",
+        "severity": "medium",
+        "description": "The transition from tips for a successful removal to innovative solutions is abrupt.",
+        "suggestedFix": "Introduce a connecting sentence or paragraph to smoothly transition from practical tips to innovative solutions."
+      },
+      {
+        "headingIndex": 17,
+        "headingText": "## Local Expertise and Challenges in Bristol",
+        "issueType": "negative-attribute-missing",
+        "severity": "medium",
+        "description": "The heading does not address potential negative aspects or challenges of moving in Bristol.",
+        "suggestedFix": "Include a discussion of potential challenges or drawbacks specific to moving in Bristol."
+      }
+    ],
+    "correctedHeadings": [
+      {
+        "level": 1,
+        "text": "Comprehensive Home Removal Services in Bristol by Mo Transport",
+        "structureInstructions": "Establish as the main topic of the page.",
+        "targetQueries": [
+          {
+            "query": "home removals",
+            "volume": 600,
+            "intent": "commercial"
+          }
+        ],
+        "serpFeatures": [
+          "FS",
+          "PAA"
+        ],
+        "ruleCodes": [
+          "FS",
+          "PAA",
+          "NER",
+          "TF-IDF",
+          "CO-OCC"
+        ],
+        "intent": "Provide an overview of Mo Transport's home removal services in Bristol.",
+        "wordCountTarget": 250,
+        "structurePattern": "purpose-summary",
+        "contentDesignPattern": "paragraph",
+        "snippetTarget": true,
+        "paaTarget": true
+      },
+      {
+        "level": 2,
+        "text": "Understanding Home Removal Services",
+        "structureInstructions": "Introduce a brief transition to connect with the overview.",
+        "targetQueries": [
+          {
+            "query": "home removal companies",
+            "volume": 70,
+            "intent": "commercial"
+          }
+        ],
+        "serpFeatures": [
+          "PAA"
+        ],
+        "ruleCodes": [
+          "FS",
+          "PAA",
+          "TF-IDF"
+        ],
+        "intent": "Explain what home removal services are and their significance.",
+        "wordCountTarget": 150,
+        "structurePattern": "explicit-definition",
+        "contentDesignPattern": "paragraph",
+        "snippetTarget": true,
+        "paaTarget": true
+      },
+      {
+        "level": 3,
+        "text": "Types of Home Removal Services Offered",
+        "structureInstructions": "Merge with previous heading or refine focus.",
+        "targetQueries": [
+          {
+            "query": "house removal companies",
+            "volume": 450,
+            "intent": "commercial"
+          }
+        ],
+        "serpFeatures": [
+          "FS"
+        ],
+        "ruleCodes": [
+          "FS",
+          "PAA"
+        ],
+        "intent": "Enumerate the various home removal services available.",
+        "wordCountTarget": 120,
+        "structurePattern": "explicit-definition",
+        "contentDesignPattern": "paragraph",
+        "snippetTarget": true,
+        "paaTarget": true
+      },
+      {
+        "level": 3,
+        "text": "Comparing Costs Among Companies",
+        "structureInstructions": "Incorporate into broader cost discussion or separate section.",
+        "targetQueries": [
+          {
+            "query": "household removals",
+            "volume": 100,
+            "intent": "commercial"
+          }
+        ],
+        "serpFeatures": [
+          "PAA"
+        ],
+        "ruleCodes": [
+          "FS",
+          "PAA",
+          "TF-IDF"
+        ],
+        "intent": "Provide a cost comparison of different removal companies.",
+        "wordCountTarget": 300,
+        "structurePattern": "list-definition",
+        "contentDesignPattern": "list",
+        "snippetTarget": true,
+        "paaTarget": true
+      },
+      {
+        "level": 2,
+        "text": "Innovative Home Removal Solutions",
+        "structureInstructions": "Introduce a connecting sentence for smooth transition.",
+        "targetQueries": [
+          {
+            "query": "house removal company",
+            "volume": 100,
+            "intent": "commercial"
+          }
+        ],
+        "serpFeatures": [
+          "PAA"
+        ],
+        "ruleCodes": [
+          "FS",
+          "PAA"
+        ],
+        "intent": "Highlight innovative practices in the home removal industry.",
+        "wordCountTarget": 160,
+        "structurePattern": "explicit-definition",
+        "contentDesignPattern": "paragraph",
+        "snippetTarget": true,
+        "paaTarget": true
+      },
+      {
+        "level": 2,
+        "text": "Local Expertise and Challenges in Bristol",
+        "structureInstructions": "Include potential challenges or drawbacks.",
+        "targetQueries": [
+          {
+            "query": "domestic removals",
+            "volume": 150,
+            "intent": "commercial"
+          }
+        ],
+        "serpFeatures": [
+          "PAA"
+        ],
+        "ruleCodes": [
+          "FS",
+          "PAA",
+          "TF-IDF"
+        ],
+        "intent": "Discuss the local expertise and challenges specific to Bristol.",
+        "wordCountTarget": 250,
+        "structurePattern": "list-definition",
+        "contentDesignPattern": "list",
+        "snippetTarget": true,
+        "paaTarget": true
+      }
+    ]
+  },
+  "qualityReport": {
+    "overallScore": 78,
+    "breakdown": {
+      "competitorCoverage": 75,
+      "intentSatisfaction": 80,
+      "semanticCoherence": 75,
+      "entityCompleteness": 80,
+      "headingQuality": 80
+    },
+    "knowledgeGaps": [
+      "Detailed comparison of home removal companies",
+      "Environmental impact of home removals",
+      "Innovative home removal solutions"
+    ],
+    "recommendations": [
+      "Include a detailed comparison section of home removal companies to address the SERP gap and provide more value to the audience.",
+      "Expand on the environmental impact of home removals, including eco-friendly practices, to align with emerging consumer interests.",
+      "Enhance the section on innovative home removal solutions by discussing technological advancements and their benefits.",
+      "Incorporate more customer testimonials to build trust and provide social proof of Mo Transport's services.",
+      "Ensure all headings are progressive and naturally lead the reader through the content, maintaining a logical flow."
+    ]
+  }
+}

@@ -6,6 +6,8 @@ import {
   retrieveAcrossPools,
   retrieveForPageType,
   retrieveForAgent,
+  retrieveMethodology,
+  retrieveStepKnowledge,
 } from "./retrieval";
 import type { RetrievedChunk } from "./retrieval";
 import { getCoreRules, getRulesForPageType, type PageType } from "./writing-rules/core";
@@ -137,6 +139,112 @@ function extractDomainFromUrl(url: string): string {
   }
 }
 
+// --- Step-to-Methodology RAG Mapping ---
+
+interface StepRagSpec {
+  methodologyQuery: string;
+  domainCategories: string[];
+  domainQuery: string;
+}
+
+const STEP_RAG_SPECS: Record<number, StepRagSpec> = {
+  1: {
+    methodologyQuery: "keyword research intent analysis query type classification entity extraction",
+    domainCategories: ["01-semantic-seo", "03-content-strategy"],
+    domainQuery: "keyword research intent analysis query classification semantic SEO",
+  },
+  4: {
+    methodologyQuery: "search intent classification audience segmentation business model query completeness freshness",
+    domainCategories: ["01-semantic-seo", "03-content-strategy"],
+    domainQuery: "search intent classification query categorization user intent SERP designing holistic SEO",
+  },
+  5: {
+    methodologyQuery: "SERP analysis consensus coverage gap identification featured snippets PAA autocomplete compression patterns",
+    domainCategories: ["05-on-page-seo", "01-semantic-seo"],
+    domainQuery: "SERP analysis heading patterns consensus coverage gaps featured snippets AI overview",
+  },
+  6: {
+    methodologyQuery: "competitor analysis heading depth content design patterns entity relationships topical architecture weaknesses",
+    domainCategories: ["05-on-page-seo", "02-topical-authority", "13-case-studies"],
+    domainQuery: "competitor heading depth content patterns entity relationships weakness analysis topical architecture",
+  },
+  7: {
+    methodologyQuery: "entity extraction contextual vectors topical map primary secondary entities attributes predicates semantic dependencies",
+    domainCategories: ["01-semantic-seo", "02-topical-authority", "18-content-writing-rules"],
+    domainQuery: "entity oriented SEO knowledge graph co-occurrence topical map entity attributes semantic relationships NLP",
+  },
+  8: {
+    methodologyQuery: "heading hierarchy structure foundation to depth contextual continuity unique intent per heading question vs declarative edge cases",
+    domainCategories: ["18-content-writing-rules", "19-brief-examples"],
+    domainQuery: "heading hierarchy structure progression contextual continuity writing rules",
+  },
+  9: {
+    methodologyQuery: "structure patterns writing rules information gain query mapping topical completeness factual validation non-SERP sources",
+    domainCategories: ["18-content-writing-rules", "19-brief-examples"],
+    domainQuery: "structure patterns writing rules query mapping information gain semantic system",
+  },
+  10: {
+    methodologyQuery: "internal linking topical connections supporting adjacent downstream pages contextual relationships",
+    domainCategories: ["02-topical-authority", "08-off-page-and-link-building"],
+    domainQuery: "internal linking topical connections page relationships contextual structure",
+  },
+  11: {
+    methodologyQuery: "heading validation fluff removal semantic repetition topical focus syntactic precision unique intent",
+    domainCategories: ["18-content-writing-rules"],
+    domainQuery: "heading validation semantic repetition fluff removal topical focus natural language",
+  },
+  12: {
+    methodologyQuery: "brief quality contextual depth entity relationships completeness usefulness surpass competitors intent satisfaction",
+    domainCategories: ["19-brief-examples", "17-strategy-blueprints"],
+    domainQuery: "brief quality scoring contextual depth entity completeness practical usefulness",
+  },
+};
+
+/**
+ * Retrieve methodology + domain knowledge for a pipeline step.
+ * Returns formatted sections to inject into GPT-4o system prompts.
+ */
+async function getStepMethodologyContext(stepNum: number, topicContext?: string): Promise<string> {
+  const spec = STEP_RAG_SPECS[stepNum];
+  if (!spec) return "";
+
+  try {
+    const [methodologyChunks, domainChunks] = await Promise.all([
+      retrieveMethodology(spec.methodologyQuery, 4),
+      retrieveStepKnowledge(
+        topicContext ? `${spec.domainQuery} ${topicContext}` : spec.domainQuery,
+        spec.domainCategories,
+        4
+      ),
+    ]);
+
+    const sections: string[] = [];
+
+    if (methodologyChunks.length > 0) {
+      const methodText = methodologyChunks
+        .map((c) => c.content.slice(0, 600))
+        .join("\n\n");
+      sections.push(`## METHODOLOGY (follow these instructions exactly)\n${methodText}`);
+    }
+
+    if (domainChunks.length > 0) {
+      const domainText = domainChunks
+        .map((c) => `[${c.title}]: ${c.content.slice(0, 400)}`)
+        .join("\n\n");
+      sections.push(`## DOMAIN KNOWLEDGE (reference material)\n${domainText}`);
+    }
+
+    if (sections.length > 0) {
+      console.log(`  [RAG Step ${stepNum}] Retrieved ${methodologyChunks.length} methodology + ${domainChunks.length} domain chunks`);
+    }
+
+    return sections.join("\n\n---\n\n");
+  } catch (err) {
+    console.warn(`  [RAG Step ${stepNum}] Retrieval failed, proceeding without:`, err);
+    return "";
+  }
+}
+
 // --- Pipeline ---
 
 /**
@@ -196,7 +304,7 @@ export async function generateBrief(
 
         const [queryPreAnalysis, serpAnalysis] = await Promise.all([
           stepQueryPreAnalysis(params, keywordData, competitorDataset),
-          stepSerpAnalysis(keywordData, competitorDataset),
+          stepSerpAnalysis(keywordData, competitorDataset, params.topic),
         ]);
         sendEvent({ step: 4, label: "Intent analyzed", progress: 0.37 });
         sendEvent({ step: 5, label: "SERP patterns analyzed", progress: 0.37 });
@@ -269,24 +377,29 @@ export async function generateBrief(
         sendEvent({ step: 12, label: "Scoring brief quality...", progress: 0.87 });
 
         const [headingValidation, qualityReport] = await Promise.all([
-          stepHeadingValidation(headings, queryPreAnalysis),
+          stepHeadingValidation(headings, queryPreAnalysis, params.topic),
           stepQualityScoring(
             contextualVectors,
             headings,
             entityMap,
             queryPreAnalysis,
             serpAnalysis,
-            deepCompetitors
+            deepCompetitors,
+            params.topic
           ),
         ]);
         sendEvent({ step: 11, label: "Headings validated", progress: 0.95 });
         sendEvent({ step: 12, label: "Brief scored", progress: 0.98 });
 
         // Apply heading corrections if validation score < 8
-        const finalHeadings =
-          headingValidation.score < 8 && headingValidation.correctedHeadings
-            ? headingValidation.correctedHeadings
-            : headings;
+        // Guard: only use corrected headings if they aren't drastically shorter
+        // (GPT-4o sometimes returns a partial list instead of the full corrected set)
+        const corrected = headingValidation.correctedHeadings;
+        const useCorrected =
+          headingValidation.score < 8 &&
+          corrected &&
+          corrected.length >= Math.max(headings.length * 0.6, 5);
+        const finalHeadings = useCorrected ? corrected : headings;
 
         // Build competitors list from keyword data
         const competitors: CompetitorEntry[] =
@@ -494,6 +607,8 @@ async function stepQueryPreAnalysis(
     ? `Keyword gaps (client vs competitors): ${competitorDataset.gapKeywords.slice(0, 10).map((k) => k.keyword).join(", ")}`
     : "";
 
+  const methodologyCtx4 = await getStepMethodologyContext(4, params.topic);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.2,
@@ -502,7 +617,12 @@ async function stepQueryPreAnalysis(
     messages: [
       {
         role: "system",
-        content: `You are an expert SEO query analyst. Analyze the query and produce a comprehensive pre-analysis.
+        content: `You are executing Step 4 of the Sardar brief methodology: Query Pre-Analysis.
+
+${methodologyCtx4}
+
+## TASK
+Analyze the query and produce a comprehensive pre-analysis following the methodology above.
 
 Return JSON:
 {
@@ -516,12 +636,12 @@ Return JSON:
 }
 
 Guidelines:
-- Search intent: Determine the dominant intent. Use "mixed" only when genuinely ambiguous.
-- Query completeness: Detect missing qualifiers like audience (who?), location (where?), budget (how much?), experience level, timeframe, use-case.
-- Audience segments: Define who would search this query. Be specific (not just "general public").
-- Business model: What business purpose does this page serve?
-- Depth threshold: How deep must the content go to satisfy the searcher? "shallow" = quick answer, "exhaustive" = comprehensive guide.
-- Freshness: Does this topic involve prices, laws, statistics, trends, or other time-sensitive data?`,
+- Identify the exact search intent before anything else. The intent layer defines the entire content structure.
+- Determine query type (head-term, mid-tail, long-tail, entity-based, etc.) — this changes topical structure and heading depth.
+- Assess query completeness rigorously. Detect missing audience, location, use-case, budget, risk level, experience level, time frame qualifiers.
+- Define audience segments specifically — not "general public" but the actual people searching.
+- Determine the search intent satisfaction threshold — how deep must content go?
+- Assess freshness: prices, laws, statistics, trends, algorithms, crime rates, or market changes require updated data.`,
       },
       {
         role: "user",
@@ -548,7 +668,8 @@ Guidelines:
 
 async function stepSerpAnalysis(
   keywordData: KeywordResearchResult | null,
-  competitorDataset: CompetitorDataset
+  competitorDataset: CompetitorDataset,
+  topic?: string
 ): Promise<SerpAnalysis> {
   if (!keywordData) {
     return {
@@ -576,6 +697,8 @@ async function stepSerpAnalysis(
     ? `\nBulk SERP features for related keywords:\n${bulkSerp.map((s) => `${s.keyword}: ${s.features.join(", ") || "none"}`).join("\n")}`
     : "";
 
+  const methodologyCtx5 = await getStepMethodologyContext(5, topic);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
@@ -584,7 +707,12 @@ async function stepSerpAnalysis(
     messages: [
       {
         role: "system",
-        content: `You are a SERP analysis expert. Analyze the SERP data and competitor headings to identify patterns, consensus, and gaps.
+        content: `You are executing Step 5 of the Sardar brief methodology: SERP Pattern Analysis.
+
+${methodologyCtx5}
+
+## TASK
+Analyze the live SERP data following the methodology above. SERP analysis defines the actual ranking consensus — not assumptions.
 
 Return JSON:
 {
@@ -598,13 +726,13 @@ Return JSON:
 }
 
 Guidelines:
-- consensusCoverage: Topics that ALL or nearly all top-ranking pages cover. These are minimum requirements.
-- serpGaps: Angles, entities, or subtopics that competitors miss or cover shallowly. These are differentiation opportunities.
-- compressionPatterns: Overused shallow sections competitors repeat without adding value (e.g., generic "Why choose us" sections with no specifics).
-- featuredSnippetOpportunities: Queries that currently have featured snippets or could trigger them. Identify the format (paragraph, list, table) and a targeting strategy.
-- aiOverviewPresence: Whether the SERP features suggest AI Overviews are present.
-- serpFeaturePresence: Which SERP features are present across the keyword set.
-- autocompleteVariations: Related query variations users might also search.`,
+- consensusCoverage: Topics covered by nearly ALL top-ranking pages — these are minimum coverage requirements.
+- serpGaps: Missing angles competitors are NOT covering deeply, accurately, or contextually. These are differentiation opportunities.
+- compressionPatterns: Overused shallow sections competitors repeat without adding value. Detect where Google compresses repeated info into expected entity clusters.
+- featuredSnippetOpportunities: Extract how Google summarizes the topic and which entities/attributes it prioritizes. Identify format (paragraph, list, table) and targeting strategy.
+- PAA questions reveal query expansion paths, hidden user intent layers, and missing semantic branches.
+- autocompleteVariations: Related searches and autocomplete reveal modifier relationships and adjacent topical demand.
+- Analyze ALL SERP features: image packs, videos, maps, forums, Reddit threads — different features indicate different content expectations.`,
       },
       {
         role: "user",
@@ -656,6 +784,8 @@ async function stepDeepCompetitorAnalysis(
     ? `\nKeyword gap opportunities (keywords competitors rank for but client does not):\n${competitorDataset.gapKeywords.slice(0, 15).map((k) => `${k.keyword} (${k.volume}/mo)`).join("\n")}`
     : "";
 
+  const methodologyCtx6 = await getStepMethodologyContext(6, keywordData.primary.keyword);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
@@ -664,7 +794,12 @@ async function stepDeepCompetitorAnalysis(
     messages: [
       {
         role: "system",
-        content: `You are a competitive content analyst. Review each competitor individually and produce a detailed analysis.
+        content: `You are executing Step 6 of the Sardar brief methodology: Deep Competitor Analysis.
+
+${methodologyCtx6}
+
+## TASK
+Review each competitor INDIVIDUALLY — do not analyze them collectively. Each competitor may reveal unique entity relationships or topical depth.
 
 Return JSON:
 {
@@ -685,15 +820,13 @@ Return JSON:
 }
 
 Guidelines:
-- Analyze EACH competitor individually, not collectively.
-- headingDepth: Count headings at each level based on their heading structure. maxDepth is the deepest heading level used.
-- contentDesignPatterns: Infer from headings whether they use tables, comparisons, calculators, lists, maps, FAQs, visuals, statistics, or examples.
-- strengths: What does this competitor do well topically?
-- weaknesses: Where does coverage stop? Missing entities, shallow explanations, outdated angles, generic sections.
-- topicalArchitecture: The main topic clusters/sections the competitor covers.
-- entityCoverage: Key entities (people, places, concepts, services) the competitor mentions.
-- crossCompetitorEntities: Entities that appear across most competitors (shared semantic expectations).
-- gapKeywords: Keywords from gap analysis that represent content opportunities.`,
+- Extract each competitor's topical architecture: how they structure info hierarchy from intro to conclusion.
+- Analyze heading depth: where do competitors STOP covering the topic? Where is deeper explanation needed?
+- Evaluate content design patterns: tables, comparisons, maps, visuals, calculators, examples, statistics, FAQs, internal linking.
+- Identify weak contextual areas: outdated info, missing entities, shallow explanations, lack of examples, missing comparisons, poor topical flow.
+- Extract dominant entity relationships: search engines reinforce recurring semantic relationships across ranking pages.
+- crossCompetitorEntities: Entities appearing across MOST competitors — these are shared semantic expectations.
+- gapKeywords: Keywords competitors rank for that represent content opportunities the client misses.`,
       },
       {
         role: "user",
@@ -746,6 +879,8 @@ SERP Consensus: ${serpAnalysis.consensusCoverage.slice(0, 8).join(", ") || "none
 SERP Gaps: ${serpAnalysis.serpGaps.slice(0, 5).join(", ") || "none identified"}
 Cross-competitor entities: ${deepCompetitors.crossCompetitorEntities.slice(0, 10).join(", ") || "none identified"}`;
 
+  const methodologyCtx7 = await getStepMethodologyContext(7, params.topic);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
@@ -754,13 +889,18 @@ Cross-competitor entities: ${deepCompetitors.crossCompetitorEntities.slice(0, 10
     messages: [
       {
         role: "system",
-        content: `You are a semantic SEO content strategist. Given a topic and comprehensive analysis data, identify:
+        content: `You are executing Step 7 of the Sardar brief methodology: Contextual Vectors, Entities & Topical Map.
 
-1. Contextual Vectors: 8-15 topical coverage areas that a comprehensive page must address. Each vector is a short phrase (3-6 words). Include vectors for SERP consensus topics AND gap opportunities.
+${methodologyCtx7}
 
-2. Entity Map: Key entities with their type, relevance, and whether they are explicitly mentioned in the query or implicitly expected.
+## TASK
+Extract the complete semantic foundation for this page following the methodology.
 
-3. Topical Map: How this page connects to the broader topical graph. Include the root topic, supporting topics, adjacent topics, and downstream pages.
+1. Contextual Vectors: 8-15 topical coverage areas the page must address. Each vector is a short phrase (3-6 words). Include vectors for SERP consensus AND gap opportunities. Cover root attributes, supporting attributes, contextual qualifiers, edge-case attributes, hidden informational layers, and unique semantic nuances.
+
+2. Entity Map: Extract ALL primary entities, secondary entities, attributes, predicates, modifiers, qualifiers, and semantic dependencies. Include BOTH explicit entities directly mentioned and implicit entities users and search engines expect.
+
+3. Topical Map: Build a topical map BEFORE headings. The page should not exist independently — it connects to broader topical clusters. Define root topic, supporting topics, adjacent topics, and downstream pages.
 
 Return JSON:
 {
@@ -841,6 +981,8 @@ async function stepHierarchyAndTitle(
     .map((c) => `${c.title}: ${c.weaknesses.join("; ")}`)
     .join("\n");
 
+  const methodologyCtx8 = await getStepMethodologyContext(8, params.topic);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
@@ -849,7 +991,12 @@ async function stepHierarchyAndTitle(
     messages: [
       {
         role: "system",
-        content: `You are a semantic SEO heading architect following Sardar's contextual vector methodology. Build a comprehensive H1-H4 heading structure AND a title tag for a ${params.pageType} page.
+        content: `You are executing Step 8 of the Sardar brief methodology: Heading Hierarchy + Title Tag.
+
+${methodologyCtx8}
+
+## TASK
+Build a comprehensive H1-H4 heading structure AND a title tag for a ${params.pageType} page.
 
 SARDAR'S HEADING METHODOLOGY:
 - H1 is the PURPOSE SUMMARY: it represents ALL contextual vectors of the document in heading order. It is a representative summary, NOT a keyword-stuffed title.
@@ -860,8 +1007,8 @@ SARDAR'S HEADING METHODOLOGY:
 HEADING RULES (STRICTLY ENFORCED — violations will be rejected):
 - The FIRST heading MUST be level 1 (H1). Exactly 1 H1. This is non-negotiable.
 - H1 text format: "[Main Topic] — [concise representative summary phrase]" or a natural title that captures the page's full scope.
-- Minimum 15 total headings. Aim for 20-35 headings for comprehensive coverage.
-- 5-12 H2s covering all contextual vectors
+- Target 15-22 total headings for service/location pages, 20-30 for blog/landing pages. Quality over quantity — each heading must earn its place.
+- 4-8 H2s covering the most important contextual vectors (not every vector needs its own H2)
 - H3s under H2s for subtopics, questions, or list items
 - H4s sparingly for deep detail
 - Valid nesting only: H1 → H2 → H3 → H4. Never skip levels (no H1 → H3, no H2 → H4).
@@ -957,9 +1104,68 @@ ${briefExamples ? `Similar Brief Examples:\n${briefExamples}` : ""}`,
     return h;
   });
 
-  // Warn if too few headings (but don't block — the LLM might have a reason)
+  // Retry once if too few headings — GPT-4o sometimes produces sparse output
   if (headings.length < 10) {
-    console.warn(`[Step 8] Only ${headings.length} headings generated for "${params.topic}" — expected 15+`);
+    console.warn(`[Step 8] Only ${headings.length} headings — retrying with enforcement prompt...`);
+    const retryResponse = await getOpenAI().chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.4,
+      max_tokens: 4096,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You previously generated only ${headings.length} headings for a ${params.pageType} page. This is far too few.
+
+HARD REQUIREMENT: Generate AT LEAST 15 headings (ideally 18-22) with proper H1 → H2 → H3 → H4 nesting.
+- 1 H1 (purpose-summary)
+- 5-7 H2s (major contextual vectors)
+- 6-10 H3s (sub-topics under H2s)
+- 2-4 H4s (deep detail, edge cases)
+
+Your previous headings were:
+${headings.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}
+
+Return the COMPLETE expanded heading set as JSON: { "headings": [{ "level": 1|2|3|4, "text": string }] }
+Keep the existing headings but ADD missing depth. Cover: contextual vectors, edge cases, costs, risks, process details, local factors, decision criteria, FAQs.`,
+        },
+        {
+          role: "user",
+          content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nContextual Vectors: ${contextualVectors.join(", ")}`,
+        },
+      ],
+    });
+
+    const retryContent = retryResponse.choices[0]?.message?.content || "{}";
+    const retryParsed = safeParseJSON(retryContent) as { headings?: Array<{ level: number; text: string }> };
+    if (retryParsed.headings && retryParsed.headings.length > headings.length) {
+      headings = retryParsed.headings;
+      console.log(`[Step 8] Retry produced ${headings.length} headings — using expanded set`);
+
+      // Re-apply structural enforcement on retry output
+      const retryH1Count = headings.filter((h) => h.level === 1).length;
+      if (retryH1Count === 0) {
+        headings = [{ level: 1, text: params.topic }, ...headings];
+      } else if (retryH1Count > 1) {
+        let seen = false;
+        headings = headings.map((h) => {
+          if (h.level === 1) {
+            if (seen) return { ...h, level: 2 };
+            seen = true;
+          }
+          return h;
+        });
+      }
+      if (headings[0]?.level !== 1) {
+        headings = [{ level: 1, text: params.topic }, ...headings];
+      }
+      let max = 1;
+      headings = headings.map((h) => {
+        if (h.level > max + 1) return { ...h, level: max + 1 };
+        max = Math.max(max, h.level);
+        return h;
+      });
+    }
   }
 
   return {
@@ -1008,6 +1214,8 @@ async function stepStructureAndQueryMapping(
     .map((c) => `${c.title}: ${c.contentDesignPatterns.join(", ")}`)
     .join("\n");
 
+  const methodologyCtx9 = await getStepMethodologyContext(9, params.topic);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
@@ -1016,7 +1224,12 @@ async function stepStructureAndQueryMapping(
     messages: [
       {
         role: "system",
-        content: `You are a semantic SEO brief writer following Sardar's contextual structure methodology. For each heading, assign a structure pattern AND map keywords.
+        content: `You are executing Step 9 of the Sardar brief methodology: Structure Instructions + Query Mapping.
+
+${methodologyCtx9}
+
+## TASK
+For each heading, assign a structure pattern AND map keywords following the methodology above.
 
 STRUCTURE PATTERN TAXONOMY (assign one per heading):
 ${Object.values(STRUCTURE_PATTERNS).map((p) => `- "${p.id}": ${p.description} [${p.wordCountRange[0]}-${p.wordCountRange[1]} words]`).join("\n")}
@@ -1045,10 +1258,14 @@ For each heading provide:
 PAGE-TYPE RULES (enforce for ${params.pageType} pages):
 ${getRulesForPageType((params.pageType || "blog") as PageType).slice(0, 2000)}
 
-Rules:
+HARD RULES (violations will be rejected):
 - Assign the primary keyword to the H1
-- Distribute remaining keywords to the most relevant H2/H3/H4 headings
-- H1 structureInstructions MUST follow purpose-summary format: "Summarize the entire document's contextual vectors..."
+- EVERY H1 and H2 heading MUST have at least 1 targetQuery. This is NON-NEGOTIABLE. Zero queries on any H1/H2 = rejection.
+- EVERY H3 heading SHOULD have at least 1 targetQuery unless there are truly no semantically relevant keywords left.
+- Distribute ALL provided keywords across headings. Every keyword must appear in at least one heading's targetQueries.
+- If there are more headings than keywords, derive natural-language queries from the heading text itself (e.g., heading "Types of Home Removal Services" → query "types of home removal services").
+- H1 structureInstructions MUST follow purpose-summary format: "Summarize the entire document's contextual vectors in heading order using a representative paragraph..."
+- H1 structurePattern MUST be "purpose-summary" (not "paragraph")
 
 Return JSON:
 {
@@ -1086,22 +1303,48 @@ Return JSON:
     }>;
   };
 
-  return (parsed.headings || rawHeadings).map((h, i) => {
+  // Build a pool of unused keywords for backfill
+  const usedQueries = new Set<string>();
+  const parsedHeadings = parsed.headings || rawHeadings;
+  for (const h of parsedHeadings) {
+    const raw = h as Record<string, unknown>;
+    const tq = (raw.targetQueries as QueryEntry[]) || [];
+    for (const q of tq) usedQueries.add(q.query?.toLowerCase?.() || "");
+  }
+  const unusedKeywords = allKeywords.filter((k) => !usedQueries.has(k.keyword.toLowerCase()));
+  let unusedIdx = 0;
+
+  return parsedHeadings.map((h, i) => {
     const raw = h as Record<string, unknown>;
     // Enforce purpose-summary for H1
     const level = ((h.level as 1 | 2 | 3 | 4) || 2);
     const structurePattern = level === 1
       ? "purpose-summary"
       : (raw.structurePattern as string) || "paragraph";
+
+    // Backfill: ensure H1/H2 always have at least 1 query
+    let targetQueries = (raw.targetQueries as QueryEntry[]) || [];
+    if (targetQueries.length === 0 && level <= 2) {
+      // Try to assign an unused keyword
+      if (unusedIdx < unusedKeywords.length) {
+        const kw = unusedKeywords[unusedIdx++];
+        targetQueries = [{ query: kw.keyword, volume: kw.volume, intent: kw.intent || "informational" }];
+      } else {
+        // Derive a natural query from the heading text
+        targetQueries = [{ query: h.text.replace(/^#+\s*/, "").toLowerCase(), volume: 0, intent: "informational" }];
+      }
+    }
+
     return {
       level,
       text: h.text,
       structureInstructions: (raw.structureInstructions as string) || "",
-      targetQueries: (raw.targetQueries as QueryEntry[]) || [],
+      targetQueries,
       serpFeatures: (raw.serpFeatures as string[]) || [],
       ruleCodes: (raw.ruleCodes as string[]) || [],
       intent: (raw.intent as string) || "",
       wordCountTarget: raw.wordCountTarget as number | undefined,
+      structurePattern,
       contentDesignPattern: (raw.contentDesignPattern as string) || structurePattern,
       snippetTarget: raw.snippetTarget as boolean | undefined,
       paaTarget: raw.paaTarget as boolean | undefined,
@@ -1124,6 +1367,8 @@ async function stepConnectionMapping(
     ? `\nTopical Map (broader site architecture):\n${topicalMap.map((t) => `- ${t.topic} (${t.relationship}${t.suggestedPageType ? `, ${t.suggestedPageType} page` : ""})`).join("\n")}`
     : "";
 
+  const methodologyCtx10 = await getStepMethodologyContext(10, params.topic);
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
@@ -1132,7 +1377,12 @@ async function stepConnectionMapping(
     messages: [
       {
         role: "system",
-        content: `You are an internal linking strategist. Given a page's heading structure and the broader topical map, suggest 3-8 internal linking opportunities. Each link connects a heading on this page to another page that should exist on the site.
+        content: `You are executing Step 10 of the Sardar brief methodology: Connection Mapping.
+
+${methodologyCtx10}
+
+## TASK
+Given a page's heading structure and the broader topical map, suggest 3-8 internal linking opportunities. Each link connects a heading on this page to another page that should exist on the site.
 
 Use the topical map to ensure links connect to actual related topics in the site architecture, not arbitrary pages.
 
@@ -1249,11 +1499,14 @@ function checkRuleCompliance(
 
 async function stepHeadingValidation(
   headings: EnhancedHeading[],
-  queryPreAnalysis: QueryPreAnalysis
+  queryPreAnalysis: QueryPreAnalysis,
+  topic?: string
 ): Promise<HeadingValidation> {
   const headingList = headings
     .map((h, i) => `${i}. ${"#".repeat(h.level)} ${h.text} — intent: ${h.intent}`)
     .join("\n");
+
+  const methodologyCtx11 = await getStepMethodologyContext(11, topic);
 
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
@@ -1263,7 +1516,12 @@ async function stepHeadingValidation(
     messages: [
       {
         role: "system",
-        content: `You are a heading quality validator. Evaluate the heading structure against these criteria:
+        content: `You are executing Step 11 of the Sardar brief methodology: Heading Validation.
+
+${methodologyCtx11}
+
+## TASK
+Evaluate the heading structure against these criteria:
 
 STRUCTURAL REQUIREMENTS (automatic failure if violated):
 - Must have exactly 1 H1 as the first heading
@@ -1345,11 +1603,14 @@ async function stepQualityScoring(
   entityMap: EntityMapping[],
   queryPreAnalysis: QueryPreAnalysis,
   serpAnalysis: SerpAnalysis,
-  deepCompetitors: DeepCompetitorAnalysisResult
+  deepCompetitors: DeepCompetitorAnalysisResult,
+  topic?: string
 ): Promise<BriefQualityReport> {
   const headingSummary = headings
     .map((h) => `${"#".repeat(h.level)} ${h.text}`)
     .join("\n");
+
+  const methodologyCtx12 = await getStepMethodologyContext(12, topic);
 
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
@@ -1359,7 +1620,12 @@ async function stepQualityScoring(
     messages: [
       {
         role: "system",
-        content: `You are a content brief quality assessor. Evaluate the brief against competitors and intent requirements.
+        content: `You are executing Step 12 of the Sardar brief methodology: Brief Quality Scoring.
+
+${methodologyCtx12}
+
+## TASK
+Evaluate the brief against competitors and intent requirements.
 
 Return JSON:
 {

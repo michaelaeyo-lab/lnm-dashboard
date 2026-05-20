@@ -53,6 +53,7 @@ const AGENT_POOLS: Record<string, string[] | null> = {
   ],
   "writing-rules": ["18-content-writing-rules"],
   "brief-examples": ["19-brief-examples"],
+  methodology: ["20-brief-methodology"],
   all: null, // search everything
 };
 
@@ -229,10 +230,10 @@ export async function retrieveAcrossPools(
 
 /** Pool sets per page type — determines which knowledge pools to search. */
 const PAGE_TYPE_POOLS: Record<string, string[]> = {
-  service: ["content", "on-page", "strategy", "writing-rules"],
-  location: ["content", "on-page", "local-seo", "writing-rules"],
-  blog: ["content", "on-page", "strategy", "writing-rules"],
-  landing: ["content", "on-page", "strategy", "writing-rules"],
+  service: ["content", "on-page", "strategy", "writing-rules", "methodology"],
+  location: ["content", "on-page", "local-seo", "writing-rules", "methodology"],
+  blog: ["content", "on-page", "strategy", "writing-rules", "methodology"],
+  landing: ["content", "on-page", "strategy", "writing-rules", "methodology"],
 };
 
 /**
@@ -297,6 +298,37 @@ export async function retrieveSimilarBriefs(
   return retrieveChunks({
     query,
     categories: ["19-brief-examples"],
+    topK: topK ?? 5,
+  });
+}
+
+/**
+ * Retrieve methodology instructions for a specific pipeline step.
+ * Searches category 20 (brief-methodology) for operational guidance.
+ */
+export async function retrieveMethodology(
+  stepContext: string,
+  topK?: number
+): Promise<RetrievedChunk[]> {
+  return retrieveChunks({
+    query: `brief methodology: ${stepContext}`,
+    categories: ["20-brief-methodology"],
+    topK: topK ?? 5,
+  });
+}
+
+/**
+ * Retrieve domain knowledge from specific categories for a pipeline step.
+ * Used to inject relevant SEO strategy/rules alongside methodology.
+ */
+export async function retrieveStepKnowledge(
+  query: string,
+  categories: string[],
+  topK?: number
+): Promise<RetrievedChunk[]> {
+  return retrieveChunks({
+    query,
+    categories,
     topK: topK ?? 5,
   });
 }
