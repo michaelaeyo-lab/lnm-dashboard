@@ -2,349 +2,259 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  PenLine,
+  FileText,
+  BarChart3,
+  Tags,
+  Link2,
+  Users,
+  Shield,
+  Map,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { Chip } from "./ui/chip";
+import { StatusBadge } from "./ui/status-badge";
+import { ScoreRing } from "./ui/score-ring";
+import { Empty } from "./ui/empty";
+import { cn } from "../lib/utils";
 import type {
   BriefData,
   EnhancedBrief,
   EnhancedHeading,
   EntityMapping,
   ConnectionEntry,
+  DeepCompetitorAnalysisResult,
   QueryPreAnalysis,
   SerpAnalysis,
-  DeepCompetitorAnalysisResult,
   TopicalMapEntry,
   HeadingValidation,
   BriefQualityReport,
 } from "../lib/types";
 
-type TabId = "headings" | "entities" | "connections" | "competitors" | "analysis" | "topical-map" | "validation";
+type TabId = "outline" | "analysis" | "entities" | "topics" | "links" | "competitors" | "validation";
 
-// --- Sub-components ---
+const TAB_CONFIG: { id: TabId; label: string; icon: typeof FileText; conditionalKey?: keyof EnhancedBrief }[] = [
+  { id: "outline", label: "Outline", icon: FileText },
+  { id: "analysis", label: "Analysis", icon: BarChart3 },
+  { id: "entities", label: "Entities", icon: Tags },
+  { id: "topics", label: "Topics", icon: Map, conditionalKey: "topicalMap" },
+  { id: "links", label: "Links", icon: Link2 },
+  { id: "competitors", label: "Competitors", icon: Users },
+  { id: "validation", label: "Validation", icon: Shield },
+];
 
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    draft: "bg-zinc-700 text-zinc-300",
-    reviewing: "bg-yellow-900/50 text-yellow-300 border border-yellow-800",
-    approved: "bg-green-900/50 text-green-300 border border-green-800",
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || colors.draft}`}>
-      {status}
-    </span>
-  );
+// ── Helpers ──
+
+function formatVolume(v: number): string {
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return String(v);
 }
 
-function QualityScoreBadge({ score }: { score?: number }) {
-  if (score === undefined || score === null) return null;
-  const color = score >= 80 ? "text-green-400 bg-green-900/30" : score >= 60 ? "text-yellow-400 bg-yellow-900/30" : "text-red-400 bg-red-900/30";
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${color}`}>
-      {score}/100
-    </span>
-  );
+function scoreTone(s: number) {
+  if (s >= 80) return "mint" as const;
+  if (s >= 60) return "amber" as const;
+  return "coral" as const;
 }
 
-function VectorChips({ vectors }: { vectors: string[] }) {
-  if (vectors.length === 0) return null;
+// ── Stat Cell ──
+
+function StatCell({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div>
-      <h3 className="text-xs font-medium text-zinc-400 mb-2">Contextual Vectors</h3>
-      <div className="flex flex-wrap gap-1.5">
-        {vectors.map((v, i) => (
-          <span key={i} className="px-2 py-1 bg-zinc-800 rounded text-xs text-zinc-300">
-            {v}
-          </span>
-        ))}
-      </div>
+    <div className="flex flex-col gap-0.5 px-3 py-2.5 min-w-0">
+      <span className="eyebrow">{label}</span>
+      <span className="text-base font-semibold tabular-nums" style={{ color: "var(--text-1)" }}>
+        {value}
+      </span>
+      {sub && <span className="text-[10px]" style={{ color: "var(--text-3)" }}>{sub}</span>}
     </div>
   );
 }
+
+// ── Heading Row (Outline) ──
 
 function HeadingRow({
   heading,
-  index,
-  expanded,
-  onToggle,
+  selected,
+  onSelect,
+}: {
+  heading: EnhancedHeading;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const indent = (heading.level - 1) * 16;
+  const totalVolume = heading.targetQueries.reduce((s, q) => s + q.volume, 0);
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer",
+        selected ? "bg-[var(--accent-faint)]" : "hover:bg-[var(--surface)]"
+      )}
+      style={{
+        paddingLeft: `${12 + indent}px`,
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <span
+        className="font-mono text-[10px] font-semibold w-5 flex-shrink-0 text-center rounded py-0.5"
+        style={{
+          background: heading.level === 1 ? "var(--accent-soft)" : "var(--surface)",
+          color: heading.level === 1 ? "var(--accent)" : "var(--text-3)",
+        }}
+      >
+        H{heading.level}
+      </span>
+      <span className="text-[13px] flex-1 min-w-0 truncate" style={{ color: "var(--text-1)" }}>
+        {heading.text}
+      </span>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {heading.contentDesignPattern && (
+          <Badge tone="violet" mono>
+            {heading.contentDesignPattern}
+          </Badge>
+        )}
+        {heading.snippetTarget && (
+          <Badge tone="mint" mono>
+            FS
+          </Badge>
+        )}
+        {totalVolume > 0 && (
+          <span className="font-mono text-[10px] tabular-nums" style={{ color: "var(--text-3)" }}>
+            {formatVolume(totalVolume)}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ── Inspector Panel ──
+
+function Inspector({
+  heading,
   onEdit,
 }: {
   heading: EnhancedHeading;
-  index: number;
-  expanded: boolean;
-  onToggle: () => void;
   onEdit: (field: string, value: string) => void;
 }) {
-  const indent = (heading.level - 1) * 20;
-
   return (
-    <div className="border-b border-zinc-800/50 last:border-0">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-zinc-800/30 transition-colors"
-        style={{ paddingLeft: `${12 + indent}px` }}
-      >
-        <span className="text-xs text-zinc-600 w-6 flex-shrink-0 pt-0.5">H{heading.level}</span>
-        <span className="text-sm text-zinc-200 flex-1">{heading.text}</span>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {heading.contentDesignPattern && (
-            <span className="px-1.5 py-0.5 bg-purple-900/30 text-purple-300 rounded text-[10px]">
-              {heading.contentDesignPattern}
-            </span>
-          )}
-          {heading.ruleCodes.slice(0, 3).map((code) => (
-            <span key={code} className="px-1.5 py-0.5 bg-blue-900/30 text-blue-300 rounded text-[10px]">
-              {code}
-            </span>
-          ))}
-          {heading.ruleCodes.length > 3 && (
-            <span className="text-[10px] text-zinc-500">+{heading.ruleCodes.length - 3}</span>
-          )}
-          {heading.targetQueries.length > 0 && (
-            <span className="text-[10px] text-zinc-500">
-              {heading.targetQueries.reduce((s, q) => s + q.volume, 0).toLocaleString()}/mo
-            </span>
-          )}
-          <svg
-            className={`w-4 h-4 text-zinc-500 transition-transform ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="px-6 pb-3 space-y-3" style={{ paddingLeft: `${24 + indent}px` }}>
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-              Structure Instructions
-            </label>
-            <textarea
-              value={heading.structureInstructions}
-              onChange={(e) => onEdit("structureInstructions", e.target.value)}
-              rows={2}
-              className="w-full px-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-xs text-zinc-300 focus:outline-none focus:border-blue-500 resize-y"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-              Intent
-            </label>
-            <input
-              type="text"
-              value={heading.intent}
-              onChange={(e) => onEdit("intent", e.target.value)}
-              className="w-full px-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-xs text-zinc-300 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-                Rule Codes
-              </label>
-              <div className="flex flex-wrap gap-1">
-                {heading.ruleCodes.map((code) => (
-                  <span key={code} className="px-1.5 py-0.5 bg-blue-900/30 text-blue-300 rounded text-[10px]">
-                    {code}
-                  </span>
-                ))}
-                {heading.ruleCodes.length === 0 && (
-                  <span className="text-xs text-zinc-600">No rules assigned</span>
-                )}
-              </div>
-            </div>
-            {heading.snippetTarget && (
-              <span className="px-1.5 py-0.5 bg-green-900/30 text-green-300 rounded text-[10px] self-end">Snippet Target</span>
-            )}
-            {heading.paaTarget && (
-              <span className="px-1.5 py-0.5 bg-yellow-900/30 text-yellow-300 rounded text-[10px] self-end">PAA Target</span>
-            )}
-          </div>
-
-          {heading.targetQueries.length > 0 && (
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-                Target Queries
-              </label>
-              <div className="space-y-1">
-                {heading.targetQueries.map((q, qi) => (
-                  <div key={qi} className="flex items-center gap-2 text-xs">
-                    <span className="text-zinc-300 flex-1">{q.query}</span>
-                    <span className="text-zinc-500">{q.volume.toLocaleString()}/mo</span>
-                    <span className="text-zinc-600">{q.intent}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {heading.serpFeatures.length > 0 && (
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-                SERP Features
-              </label>
-              <div className="flex gap-1.5">
-                {heading.serpFeatures.map((f) => (
-                  <span key={f} className="px-1.5 py-0.5 bg-green-900/30 text-green-300 rounded text-[10px]">
-                    {f}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {heading.wordCountTarget && (
-            <div className="text-xs text-zinc-500">
-              Target: ~{heading.wordCountTarget} words
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EntityList({ entities }: { entities: EntityMapping[] }) {
-  if (entities.length === 0) return null;
-  return (
-    <div>
-      <h3 className="text-xs font-medium text-zinc-400 mb-2">Entity Map</h3>
-      <div className="grid grid-cols-2 gap-1">
-        {entities.map((e, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
-            <span className="text-zinc-300">{e.entity}</span>
-            <span className="text-zinc-600">{e.type}</span>
-            <span
-              className={`ml-auto text-[10px] ${
-                e.relevance === "primary"
-                  ? "text-blue-400"
-                  : e.relevance === "secondary"
-                    ? "text-zinc-400"
-                    : "text-zinc-600"
-              }`}
-            >
-              {e.relevance}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ConnectionList({ connections }: { connections: ConnectionEntry[] }) {
-  if (connections.length === 0) return null;
-  return (
-    <div>
-      <h3 className="text-xs font-medium text-zinc-400 mb-2">Internal Links</h3>
-      <div className="space-y-1.5">
-        {connections.map((c, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
-            <span className="text-zinc-500 flex-shrink-0">{c.fromHeading} →</span>
-            <div className="flex-1">
-              <span className="text-blue-400">{c.anchorText}</span>
-              <span className="text-zinc-600"> → {c.toPage}</span>
-              <p className="text-zinc-600 mt-0.5">{c.reason}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CompetitorList({
-  competitors,
-  deepAnalysis,
-}: {
-  competitors: { url: string; title: string; headings: string[]; wordCount?: number; serpPosition?: number }[];
-  deepAnalysis?: DeepCompetitorAnalysisResult;
-}) {
-  if (competitors.length === 0) return null;
-  return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 slidein">
+      {/* Pattern badge */}
       <div>
-        <h3 className="text-xs font-medium text-zinc-400 mb-2">Competitors</h3>
-        <div className="space-y-1.5">
-          {competitors.map((c, i) => {
-            const deep = deepAnalysis?.competitors?.find((d) => d.url === c.url);
-            return (
-              <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
-                <div className="flex items-center gap-2">
-                  {c.serpPosition && (
-                    <span className="text-zinc-500">#{c.serpPosition}</span>
-                  )}
-                  <span className="text-zinc-300 truncate">{c.title || c.url}</span>
-                  {c.wordCount && (
-                    <span className="text-zinc-600 ml-auto">{c.wordCount.toLocaleString()} words</span>
-                  )}
-                </div>
-                {c.headings.length > 0 && (
-                  <p className="text-zinc-600 mt-1 truncate">
-                    Headings: {c.headings.slice(0, 5).join(" | ")}
-                    {c.headings.length > 5 && ` +${c.headings.length - 5}`}
-                  </p>
-                )}
-                {deep && (
-                  <div className="mt-2 space-y-1 border-t border-zinc-800/50 pt-1.5">
-                    {deep.strengths.length > 0 && (
-                      <p className="text-green-400/80"><span className="text-zinc-500">Strengths:</span> {deep.strengths.join("; ")}</p>
-                    )}
-                    {deep.weaknesses.length > 0 && (
-                      <p className="text-orange-400/80"><span className="text-zinc-500">Weaknesses:</span> {deep.weaknesses.join("; ")}</p>
-                    )}
-                    {deep.contentDesignPatterns.length > 0 && (
-                      <div className="flex gap-1 mt-1">
-                        {deep.contentDesignPatterns.map((p, pi) => (
-                          <span key={pi} className="px-1.5 py-0.5 bg-purple-900/20 text-purple-300 rounded text-[10px]">{p}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <span className="eyebrow">Structure Pattern</span>
+        <div className="mt-1.5">
+          <Badge tone="accent" mono={false}>
+            {heading.contentDesignPattern || "paragraph"}
+          </Badge>
         </div>
       </div>
-      {deepAnalysis?.gapKeywords && deepAnalysis.gapKeywords.length > 0 && (
+
+      {/* Structure instructions */}
+      <div>
+        <span className="eyebrow">Structure Instructions</span>
+        <textarea
+          value={heading.structureInstructions}
+          onChange={(e) => onEdit("structureInstructions", e.target.value)}
+          rows={4}
+          className="textarea mt-1.5"
+          style={{ fontSize: 12 }}
+        />
+      </div>
+
+      {/* Intent */}
+      <div>
+        <span className="eyebrow">Intent</span>
+        <input
+          type="text"
+          value={heading.intent}
+          onChange={(e) => onEdit("intent", e.target.value)}
+          className="input input-sm mt-1.5"
+        />
+      </div>
+
+      {/* Rule codes */}
+      {heading.ruleCodes.length > 0 && (
         <div>
-          <h3 className="text-xs font-medium text-zinc-400 mb-2">Gap Keywords</h3>
-          <div className="flex flex-wrap gap-1.5">
-            {deepAnalysis.gapKeywords.map((k, i) => (
-              <span key={i} className="px-2 py-1 bg-blue-900/20 text-blue-300 border border-blue-800/30 rounded text-xs">{k}</span>
+          <span className="eyebrow">Rule Codes</span>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {heading.ruleCodes.map((code) => (
+              <Badge key={code} tone="cyan" mono>
+                {code}
+              </Badge>
             ))}
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-function KnowledgeGaps({ gaps }: { gaps: string[] }) {
-  if (gaps.length === 0) return null;
-  return (
-    <div>
-      <h3 className="text-xs font-medium text-zinc-400 mb-2">Knowledge Gaps</h3>
-      <div className="flex flex-wrap gap-1.5">
-        {gaps.map((g, i) => (
-          <span key={i} className="px-2 py-1 bg-orange-900/20 text-orange-300 border border-orange-800/30 rounded text-xs">
-            {g}
+      {/* SERP features */}
+      {heading.serpFeatures.length > 0 && (
+        <div>
+          <span className="eyebrow">SERP Features</span>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {heading.serpFeatures.map((f) => (
+              <Chip key={f} tone="mint">
+                {f}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Target queries */}
+      {heading.targetQueries.length > 0 && (
+        <div>
+          <span className="eyebrow">Target Queries</span>
+          <div className="space-y-1 mt-1.5">
+            {heading.targetQueries.map((q, i) => (
+              <div key={i} className="flex items-center gap-2 text-[12px]">
+                <span className="flex-1 min-w-0 truncate" style={{ color: "var(--text-1)" }}>
+                  {q.query}
+                </span>
+                <span className="font-mono tabular-nums" style={{ color: "var(--text-3)" }}>
+                  {q.volume.toLocaleString()}
+                </span>
+                <Badge tone="default" mono>
+                  {q.intent}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Word count target */}
+      {heading.wordCountTarget && (
+        <div className="flex items-center gap-2">
+          <span className="eyebrow">Word Target</span>
+          <span className="font-mono text-[12px] tabular-nums" style={{ color: "var(--text-2)" }}>
+            ~{heading.wordCountTarget}
           </span>
-        ))}
+        </div>
+      )}
+
+      {/* Feature targets */}
+      <div className="flex items-center gap-2">
+        {heading.snippetTarget && <Chip tone="mint">Snippet Target</Chip>}
+        {heading.paaTarget && <Chip tone="amber">PAA Target</Chip>}
       </div>
     </div>
   );
 }
 
-// --- New Tab Components ---
+// ── Tab Content Components ──
 
 function AnalysisTab({ queryPreAnalysis, serpAnalysis }: { queryPreAnalysis?: QueryPreAnalysis; serpAnalysis?: SerpAnalysis }) {
   if (!queryPreAnalysis && !serpAnalysis) {
-    return <div className="p-6 text-center text-zinc-600 text-sm">No analysis data available (generated with older pipeline)</div>;
+    return <Empty icon="alert" title="No analysis data" sub="Generated with an older pipeline version" />;
   }
 
   return (
@@ -352,57 +262,37 @@ function AnalysisTab({ queryPreAnalysis, serpAnalysis }: { queryPreAnalysis?: Qu
       {queryPreAnalysis && (
         <>
           <div>
-            <h3 className="text-xs font-medium text-zinc-400 mb-2">Query Analysis</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
-                <span className="text-[10px] text-zinc-500 block">Search Intent</span>
-                <span className="text-xs text-zinc-200">{queryPreAnalysis.searchIntent}</span>
-              </div>
-              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
-                <span className="text-[10px] text-zinc-500 block">Query Type</span>
-                <span className="text-xs text-zinc-200">{queryPreAnalysis.queryType}</span>
-              </div>
-              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
-                <span className="text-[10px] text-zinc-500 block">Business Model</span>
-                <span className="text-xs text-zinc-200">{queryPreAnalysis.businessModel}</span>
-              </div>
-              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
-                <span className="text-[10px] text-zinc-500 block">Depth Required</span>
-                <span className="text-xs text-zinc-200">{queryPreAnalysis.intentSatisfactionThreshold.depth}</span>
-              </div>
-              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
-                <span className="text-[10px] text-zinc-500 block">Freshness</span>
-                <span className="text-xs text-zinc-200">{queryPreAnalysis.freshnessRequirement}</span>
-              </div>
-              <div className="px-2 py-1.5 bg-zinc-800/30 rounded">
-                <span className="text-[10px] text-zinc-500 block">Completeness</span>
-                <span className={`text-xs ${queryPreAnalysis.queryCompleteness.isComplete ? "text-green-400" : "text-orange-400"}`}>
-                  {queryPreAnalysis.queryCompleteness.isComplete ? "Complete" : "Incomplete"}
-                </span>
-              </div>
+            <span className="eyebrow">Query Analysis</span>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+              {[
+                { label: "Search Intent", value: queryPreAnalysis.searchIntent },
+                { label: "Query Type", value: queryPreAnalysis.queryType },
+                { label: "Business Model", value: queryPreAnalysis.businessModel },
+                { label: "Depth Required", value: queryPreAnalysis.intentSatisfactionThreshold.depth },
+                { label: "Freshness", value: queryPreAnalysis.freshnessRequirement },
+                {
+                  label: "Completeness",
+                  value: queryPreAnalysis.queryCompleteness.isComplete ? "Complete" : "Incomplete",
+                },
+              ].map((item) => (
+                <div key={item.label} className="card card-pad">
+                  <span className="text-[10px]" style={{ color: "var(--text-3)" }}>{item.label}</span>
+                  <span className="block text-[12px] font-medium mt-0.5" style={{ color: "var(--text-1)" }}>
+                    {item.value}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-
-          {!queryPreAnalysis.queryCompleteness.isComplete && queryPreAnalysis.queryCompleteness.missingQualifiers.length > 0 && (
-            <div>
-              <h3 className="text-xs font-medium text-orange-400 mb-2">Missing Qualifiers</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {queryPreAnalysis.queryCompleteness.missingQualifiers.map((q, i) => (
-                  <span key={i} className="px-2 py-1 bg-orange-900/20 text-orange-300 border border-orange-800/30 rounded text-xs">{q}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div>
-            <h3 className="text-xs font-medium text-zinc-400 mb-2">Audience Segments</h3>
-            <div className="flex gap-2">
-              <span className="px-2 py-1 bg-blue-900/20 text-blue-300 rounded text-xs">{queryPreAnalysis.audienceSegments.primary}</span>
+            <span className="eyebrow">Audience Segments</span>
+            <div className="flex gap-2 mt-1.5">
+              <Chip tone="accent">{queryPreAnalysis.audienceSegments.primary}</Chip>
               {queryPreAnalysis.audienceSegments.secondary && (
-                <span className="px-2 py-1 bg-zinc-800 text-zinc-300 rounded text-xs">{queryPreAnalysis.audienceSegments.secondary}</span>
+                <Chip>{queryPreAnalysis.audienceSegments.secondary}</Chip>
               )}
               {queryPreAnalysis.audienceSegments.tertiary && (
-                <span className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-xs">{queryPreAnalysis.audienceSegments.tertiary}</span>
+                <Chip>{queryPreAnalysis.audienceSegments.tertiary}</Chip>
               )}
             </div>
           </div>
@@ -413,59 +303,49 @@ function AnalysisTab({ queryPreAnalysis, serpAnalysis }: { queryPreAnalysis?: Qu
         <>
           {serpAnalysis.consensusCoverage.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium text-zinc-400 mb-2">SERP Consensus (must cover)</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {serpAnalysis.consensusCoverage.map((t, i) => (
-                  <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-300 rounded text-xs">{t}</span>
-                ))}
+              <span className="eyebrow">SERP Consensus (must cover)</span>
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {serpAnalysis.consensusCoverage.map((t, i) => <Chip key={i}>{t}</Chip>)}
               </div>
             </div>
           )}
-
           {serpAnalysis.serpGaps.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium text-green-400 mb-2">SERP Gaps (opportunities)</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {serpAnalysis.serpGaps.map((g, i) => (
-                  <span key={i} className="px-2 py-1 bg-green-900/20 text-green-300 border border-green-800/30 rounded text-xs">{g}</span>
-                ))}
+              <span className="eyebrow" style={{ color: "var(--mint)" }}>SERP Gaps (opportunities)</span>
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {serpAnalysis.serpGaps.map((g, i) => <Chip key={i} tone="mint">{g}</Chip>)}
               </div>
             </div>
           )}
-
           {serpAnalysis.compressionPatterns.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium text-red-400 mb-2">Compression Patterns (avoid)</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {serpAnalysis.compressionPatterns.map((p, i) => (
-                  <span key={i} className="px-2 py-1 bg-red-900/20 text-red-300 border border-red-800/30 rounded text-xs">{p}</span>
-                ))}
+              <span className="eyebrow" style={{ color: "var(--coral)" }}>Compression Patterns (avoid)</span>
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {serpAnalysis.compressionPatterns.map((p, i) => <Chip key={i} tone="coral">{p}</Chip>)}
               </div>
             </div>
           )}
-
           {serpAnalysis.featuredSnippetOpportunities.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium text-zinc-400 mb-2">Featured Snippet Opportunities</h3>
-              <div className="space-y-1.5">
+              <span className="eyebrow">Featured Snippet Opportunities</span>
+              <div className="space-y-1.5 mt-1.5">
                 {serpAnalysis.featuredSnippetOpportunities.map((fs, i) => (
-                  <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
-                    <span className="text-zinc-300">{fs.query}</span>
-                    <span className="text-zinc-600 ml-2">({fs.currentFormat})</span>
-                    <p className="text-zinc-500 mt-0.5">{fs.strategy}</p>
+                  <div key={i} className="card card-pad text-[12px]">
+                    <span style={{ color: "var(--text-1)" }}>{fs.query}</span>
+                    <span className="ml-2" style={{ color: "var(--text-3)" }}>({fs.currentFormat})</span>
+                    <p className="mt-0.5" style={{ color: "var(--text-2)" }}>{fs.strategy}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
           <div>
-            <h3 className="text-xs font-medium text-zinc-400 mb-2">SERP Features Present</h3>
-            <div className="flex flex-wrap gap-1.5">
+            <span className="eyebrow">SERP Features Present</span>
+            <div className="flex flex-wrap gap-1 mt-1.5">
               {Object.entries(serpAnalysis.serpFeaturePresence).map(([key, val]) => (
-                <span key={key} className={`px-2 py-1 rounded text-xs ${val ? "bg-green-900/20 text-green-300" : "bg-zinc-800/50 text-zinc-600"}`}>
+                <Chip key={key} tone={val ? "mint" : "default"}>
                   {key.replace(/([A-Z])/g, " $1").trim()}
-                </span>
+                </Chip>
               ))}
             </div>
           </div>
@@ -475,50 +355,42 @@ function AnalysisTab({ queryPreAnalysis, serpAnalysis }: { queryPreAnalysis?: Qu
   );
 }
 
-function TopicalMapTab({ topicalMap }: { topicalMap?: TopicalMapEntry[] }) {
-  if (!topicalMap || topicalMap.length === 0) {
-    return <div className="p-6 text-center text-zinc-600 text-sm">No topical map available</div>;
-  }
+function EntitiesTab({ entities }: { entities: EntityMapping[] }) {
+  if (entities.length === 0) return <Empty icon="alert" title="No entities" sub="No entity mappings generated" />;
+  return (
+    <div className="p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-1.5">
+        {entities.map((e, i) => (
+          <div key={i} className="flex items-center gap-2 text-[12px] card card-pad">
+            <span className="flex-1 min-w-0 truncate" style={{ color: "var(--text-1)" }}>{e.entity}</span>
+            <Badge tone="default" mono>{e.type}</Badge>
+            <Badge tone={e.relevance === "primary" ? "accent" : e.relevance === "secondary" ? "cyan" : "default"} mono>
+              {e.relevance}
+            </Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  const grouped = {
-    root: topicalMap.filter((t) => t.relationship === "root"),
-    supporting: topicalMap.filter((t) => t.relationship === "supporting"),
-    adjacent: topicalMap.filter((t) => t.relationship === "adjacent"),
-    downstream: topicalMap.filter((t) => t.relationship === "downstream"),
-  };
-
-  const sectionColors: Record<string, string> = {
-    root: "border-blue-800/50 bg-blue-900/10",
-    supporting: "border-green-800/50 bg-green-900/10",
-    adjacent: "border-yellow-800/50 bg-yellow-900/10",
-    downstream: "border-purple-800/50 bg-purple-900/10",
-  };
-
-  const textColors: Record<string, string> = {
-    root: "text-blue-300",
-    supporting: "text-green-300",
-    adjacent: "text-yellow-300",
-    downstream: "text-purple-300",
-  };
-
+function TopicsTab({ topicalMap }: { topicalMap?: TopicalMapEntry[] }) {
+  if (!topicalMap || topicalMap.length === 0) return <Empty icon="alert" title="No topical map" />;
+  const groups = { root: "accent", supporting: "mint", adjacent: "amber", downstream: "violet" } as const;
   return (
     <div className="p-4 space-y-4">
-      {(["root", "supporting", "adjacent", "downstream"] as const).map((rel) => {
-        const items = grouped[rel];
+      {(Object.keys(groups) as (keyof typeof groups)[]).map((rel) => {
+        const items = topicalMap.filter((t) => t.relationship === rel);
         if (items.length === 0) return null;
         return (
           <div key={rel}>
-            <h3 className={`text-xs font-medium mb-2 capitalize ${textColors[rel]}`}>{rel} Topics</h3>
-            <div className="space-y-1">
+            <span className="eyebrow capitalize">{rel} Topics</span>
+            <div className="space-y-1 mt-1.5">
               {items.map((t, i) => (
-                <div key={i} className={`text-xs px-2 py-1.5 rounded border ${sectionColors[rel]}`}>
-                  <span className={textColors[rel]}>{t.topic}</span>
-                  {t.suggestedPageType && (
-                    <span className="text-zinc-600 ml-2">({t.suggestedPageType})</span>
-                  )}
-                  {t.clusterLabel && (
-                    <span className="text-zinc-600 ml-2">cluster: {t.clusterLabel}</span>
-                  )}
+                <div key={i} className="card card-pad flex items-center gap-2 text-[12px]">
+                  <Chip tone={groups[rel]}>{t.topic}</Chip>
+                  {t.suggestedPageType && <span style={{ color: "var(--text-3)" }}>({t.suggestedPageType})</span>}
+                  {t.clusterLabel && <Badge tone="default" mono>{t.clusterLabel}</Badge>}
                 </div>
               ))}
             </div>
@@ -529,28 +401,107 @@ function TopicalMapTab({ topicalMap }: { topicalMap?: TopicalMapEntry[] }) {
   );
 }
 
+function LinksTab({ connections }: { connections: ConnectionEntry[] }) {
+  if (connections.length === 0) return <Empty icon="alert" title="No internal links" />;
+  return (
+    <div className="p-4 space-y-1.5">
+      {connections.map((c, i) => (
+        <div key={i} className="card card-pad text-[12px]">
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--text-3)" }}>{c.fromHeading}</span>
+            <ArrowLeft size={10} className="rotate-180" style={{ color: "var(--text-3)" }} />
+            <span style={{ color: "var(--accent)" }}>{c.anchorText}</span>
+            <ArrowLeft size={10} className="rotate-180" style={{ color: "var(--text-3)" }} />
+            <span className="flex items-center gap-1" style={{ color: "var(--cyan)" }}>
+              {c.toPage} <ExternalLink size={10} />
+            </span>
+          </div>
+          <p className="mt-1" style={{ color: "var(--text-3)" }}>{c.reason}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CompetitorsTab({
+  competitors,
+  deepAnalysis,
+}: {
+  competitors: { url: string; title: string; headings: string[]; wordCount?: number; serpPosition?: number }[];
+  deepAnalysis?: DeepCompetitorAnalysisResult;
+}) {
+  if (competitors.length === 0) return <Empty icon="alert" title="No competitors" />;
+  return (
+    <div className="p-4 space-y-4">
+      <div className="space-y-1.5">
+        {competitors.map((c, i) => {
+          const deep = deepAnalysis?.competitors?.find((d) => d.url === c.url);
+          return (
+            <div key={i} className="card card-pad text-[12px]">
+              <div className="flex items-center gap-2">
+                {c.serpPosition && (
+                  <Badge tone="accent" mono>#{c.serpPosition}</Badge>
+                )}
+                <span className="flex-1 min-w-0 truncate" style={{ color: "var(--text-1)" }}>
+                  {c.title || c.url}
+                </span>
+                {c.wordCount && (
+                  <span className="font-mono tabular-nums" style={{ color: "var(--text-3)" }}>
+                    {c.wordCount.toLocaleString()} words
+                  </span>
+                )}
+              </div>
+              {deep && (
+                <div className="mt-2 pt-2 space-y-1" style={{ borderTop: "1px solid var(--border)" }}>
+                  {deep.strengths.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      <span style={{ color: "var(--text-3)" }}>Strengths:</span>
+                      {deep.strengths.map((s, si) => <Chip key={si} tone="mint">{s}</Chip>)}
+                    </div>
+                  )}
+                  {deep.weaknesses.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      <span style={{ color: "var(--text-3)" }}>Weaknesses:</span>
+                      {deep.weaknesses.map((w, wi) => <Chip key={wi} tone="coral">{w}</Chip>)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {deepAnalysis?.gapKeywords && deepAnalysis.gapKeywords.length > 0 && (
+        <div>
+          <span className="eyebrow">Gap Keywords</span>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {deepAnalysis.gapKeywords.map((k, i) => <Chip key={i} tone="cyan">{k}</Chip>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ValidationTab({ headingValidation, qualityReport }: { headingValidation?: HeadingValidation; qualityReport?: BriefQualityReport }) {
   if (!headingValidation && !qualityReport) {
-    return <div className="p-6 text-center text-zinc-600 text-sm">No validation data available</div>;
+    return <Empty icon="alert" title="No validation data" />;
   }
-
-  const scoreColor = (score: number) =>
-    score >= 80 ? "text-green-400" : score >= 60 ? "text-yellow-400" : "text-red-400";
 
   return (
     <div className="p-4 space-y-5">
       {qualityReport && (
         <div>
-          <h3 className="text-xs font-medium text-zinc-400 mb-2">Quality Scores</h3>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="px-2 py-2 bg-zinc-800/30 rounded text-center">
-              <div className={`text-2xl font-bold ${scoreColor(qualityReport.overallScore)}`}>{qualityReport.overallScore}</div>
-              <div className="text-[10px] text-zinc-500">Overall</div>
-            </div>
+          <span className="eyebrow">Quality Breakdown</span>
+          <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 mt-2">
             {Object.entries(qualityReport.breakdown).map(([key, val]) => (
-              <div key={key} className="px-2 py-2 bg-zinc-800/30 rounded text-center">
-                <div className={`text-lg font-bold ${scoreColor(val)}`}>{val}</div>
-                <div className="text-[10px] text-zinc-500">{key.replace(/([A-Z])/g, " $1").trim()}</div>
+              <div key={key} className="card card-pad text-center">
+                <div className="font-mono text-lg font-bold tabular-nums" style={{ color: `var(--${scoreTone(val)})` }}>
+                  {val}
+                </div>
+                <div className="text-[10px] mt-0.5" style={{ color: "var(--text-3)" }}>
+                  {key.replace(/([A-Z])/g, " $1").trim()}
+                </div>
               </div>
             ))}
           </div>
@@ -559,44 +510,47 @@ function ValidationTab({ headingValidation, qualityReport }: { headingValidation
 
       {headingValidation && (
         <div>
-          <h3 className="text-xs font-medium text-zinc-400 mb-2">
-            Heading Validation
-            <span className={`ml-2 ${headingValidation.score >= 8 ? "text-green-400" : "text-orange-400"}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="eyebrow">Heading Validation</span>
+            <Badge tone={headingValidation.score >= 8 ? "mint" : "amber"} mono>
               {headingValidation.score}/10
-            </span>
-          </h3>
+            </Badge>
+          </div>
           {headingValidation.issues.length > 0 ? (
             <div className="space-y-1.5">
               {headingValidation.issues.map((issue, i) => (
-                <div key={i} className="text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
+                <div key={i} className="card card-pad text-[12px]">
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      issue.severity === "high" ? "bg-red-900/30 text-red-300" :
-                      issue.severity === "medium" ? "bg-yellow-900/30 text-yellow-300" :
-                      "bg-zinc-700 text-zinc-400"
-                    }`}>
+                    <Badge
+                      tone={issue.severity === "high" ? "coral" : issue.severity === "medium" ? "amber" : "default"}
+                      mono
+                    >
                       {issue.severity}
+                    </Badge>
+                    <span style={{ color: "var(--text-2)" }}>{issue.issueType}</span>
+                    <span className="ml-auto truncate max-w-[200px]" style={{ color: "var(--text-3)" }}>
+                      {issue.headingText}
                     </span>
-                    <span className="text-zinc-500">{issue.issueType}</span>
-                    <span className="text-zinc-400 ml-auto">H: {issue.headingText.slice(0, 40)}{issue.headingText.length > 40 ? "..." : ""}</span>
                   </div>
-                  <p className="text-zinc-500 mt-1">{issue.description}</p>
-                  {issue.suggestedFix && <p className="text-green-400/70 mt-0.5">{issue.suggestedFix}</p>}
+                  <p className="mt-1" style={{ color: "var(--text-3)" }}>{issue.description}</p>
+                  {issue.suggestedFix && (
+                    <p className="mt-0.5" style={{ color: "var(--mint)" }}>{issue.suggestedFix}</p>
+                  )}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-green-400">All headings passed validation</p>
+            <p className="text-[12px]" style={{ color: "var(--mint)" }}>All headings passed validation</p>
           )}
         </div>
       )}
 
       {qualityReport?.recommendations && qualityReport.recommendations.length > 0 && (
         <div>
-          <h3 className="text-xs font-medium text-zinc-400 mb-2">Recommendations</h3>
-          <div className="space-y-1">
+          <span className="eyebrow">Recommendations</span>
+          <div className="space-y-1 mt-1.5">
             {qualityReport.recommendations.map((r, i) => (
-              <p key={i} className="text-xs text-zinc-400 px-2 py-1 bg-zinc-800/30 rounded">{r}</p>
+              <p key={i} className="text-[12px] card card-pad" style={{ color: "var(--text-2)" }}>{r}</p>
             ))}
           </div>
         </div>
@@ -605,30 +559,25 @@ function ValidationTab({ headingValidation, qualityReport }: { headingValidation
   );
 }
 
-// --- Main Component ---
+// ── Main Component ──
 
 export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
   const router = useRouter();
   const [brief, setBrief] = useState(initialBrief);
   const [data, setData] = useState<EnhancedBrief>(initialBrief.data);
-  const [expandedHeading, setExpandedHeading] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>("headings");
+  const [selectedHeading, setSelectedHeading] = useState<number | null>(data.headings.length > 0 ? 0 : null);
+  const [activeTab, setActiveTab] = useState<TabId>("outline");
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [startingWrite, setStartingWrite] = useState(false);
 
-  const editHeading = useCallback(
-    (index: number, field: string, value: string) => {
-      setData((prev) => ({
-        ...prev,
-        headings: prev.headings.map((h, i) =>
-          i === index ? { ...h, [field]: value } : h
-        ),
-      }));
-      setDirty(true);
-    },
-    []
-  );
+  const editHeading = useCallback((index: number, field: string, value: string) => {
+    setData((prev) => ({
+      ...prev,
+      headings: prev.headings.map((h, i) => (i === index ? { ...h, [field]: value } : h)),
+    }));
+    setDirty(true);
+  }, []);
 
   async function handleSave() {
     setSaving(true);
@@ -643,8 +592,11 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
         setBrief(updated);
         setDirty(false);
       }
-    } catch { /* ignore */ }
-    finally { setSaving(false); }
+    } catch {
+      /* ignore */
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleStatusChange(status: string) {
@@ -652,7 +604,6 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
     try {
       const body: Record<string, unknown> = { status };
       if (dirty) body.data = data;
-
       const res = await fetch(`/api/briefs/${brief.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -663,16 +614,17 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
         setBrief(updated);
         setDirty(false);
       }
-    } catch { /* ignore */ }
-    finally { setSaving(false); }
+    } catch {
+      /* ignore */
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleStartWriting() {
     setStartingWrite(true);
     try {
-      const res = await fetch(`/api/briefs/${brief.id}/start-writing`, {
-        method: "POST",
-      });
+      const res = await fetch(`/api/briefs/${brief.id}/start-writing`, { method: "POST" });
       if (res.ok) {
         router.push("/write");
         return;
@@ -696,207 +648,177 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
     router.push("/briefs");
   }
 
-  const hasAnalysis = !!(data.queryPreAnalysis || data.serpAnalysis);
-  const hasTopicalMap = !!(data.topicalMap && data.topicalMap.length > 0);
-  const hasValidation = !!(data.headingValidation || data.qualityReport);
+  const totalVolume = data.headings.reduce((sum, h) => sum + h.targetQueries.reduce((s, q) => s + q.volume, 0), 0);
+  const overallScore = data.qualityReport?.overallScore ?? 0;
 
-  const tabs: { id: TabId; label: string; count?: number }[] = [
-    { id: "headings", label: "Headings", count: data.headings.length },
-    ...(hasAnalysis ? [{ id: "analysis" as TabId, label: "Analysis" }] : []),
-    { id: "entities", label: "Entities", count: data.entityMap.length },
-    ...(hasTopicalMap ? [{ id: "topical-map" as TabId, label: "Topical Map", count: data.topicalMap!.length }] : []),
-    { id: "connections", label: "Links", count: data.connectionMap.length },
-    { id: "competitors", label: "Competitors", count: data.competitors.length },
-    ...(hasValidation ? [{ id: "validation" as TabId, label: "Validation" }] : []),
-  ];
-
-  const totalVolume = data.headings.reduce(
-    (sum, h) => sum + h.targetQueries.reduce((s, q) => s + q.volume, 0),
-    0
-  );
+  const visibleTabs = TAB_CONFIG.filter((tab) => {
+    if (!tab.conditionalKey) return true;
+    const val = data[tab.conditionalKey];
+    return val && (Array.isArray(val) ? val.length > 0 : true);
+  });
 
   return (
-    <div className="max-w-4xl">
+    <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <button
-              onClick={() => router.push("/briefs")}
-              className="text-zinc-400 hover:text-zinc-200 text-sm"
-            >
-              ← Briefs
-            </button>
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <Button variant="ghost" size="sm" onClick={() => router.push("/briefs")} leading={<ArrowLeft size={13} />}>
+              Briefs
+            </Button>
             <StatusBadge status={brief.status} />
-            <QualityScoreBadge score={data.qualityReport?.overallScore} />
-            <span className="text-xs text-zinc-600">v{brief.version}</span>
+            {overallScore > 0 && <Badge tone={scoreTone(overallScore)} mono>{overallScore}/100</Badge>}
+            <span className="font-mono text-[10px]" style={{ color: "var(--text-3)" }}>v{brief.version}</span>
           </div>
-          <h1 className="text-xl font-bold text-zinc-100">{brief.topic}</h1>
+          <h1 className="h1">{brief.topic}</h1>
           {data.titleTag?.titleTag && (
-            <p className="text-sm text-blue-400 mt-0.5">{data.titleTag.titleTag}</p>
+            <p className="text-sm mt-1" style={{ color: "var(--accent)" }}>{data.titleTag.titleTag}</p>
           )}
-          <p className="text-xs text-zinc-500 mt-1">
-            {brief.niche} / {brief.pageType}
-            {brief.location && ` / ${brief.location}`}
-            {brief.clientName && ` — ${brief.clientName}`}
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <Badge tone="default" mono={false}>{brief.niche}</Badge>
+            <Badge tone="default" mono={false}>{brief.pageType}</Badge>
+            {brief.location && <Badge tone="default" mono={false}>{brief.location}</Badge>}
+            {brief.clientName && <span className="text-[12px]" style={{ color: "var(--text-3)" }}>{brief.clientName}</span>}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {dirty && (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
+            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving} leading={<Save size={12} />}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
           )}
           {brief.status === "reviewing" && (
             <>
-              <button
-                onClick={() => handleStatusChange("draft")}
-                disabled={saving}
-                className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs rounded-lg transition-colors"
-              >
+              <Button variant="default" size="sm" onClick={() => handleStatusChange("draft")} disabled={saving}>
                 Back to Draft
-              </button>
-              <button
-                onClick={() => handleStatusChange("approved")}
-                disabled={saving}
-                className="px-3 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs rounded-lg transition-colors"
-              >
-                Approve Brief
-              </button>
+              </Button>
+              <Button variant="success" size="sm" onClick={() => handleStatusChange("approved")} disabled={saving}>
+                Approve
+              </Button>
             </>
           )}
           {brief.status === "approved" && !brief.sessionId && (
-            <button
-              onClick={handleStartWriting}
-              disabled={startingWrite}
-              className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-sm rounded-lg transition-colors"
-            >
-              {startingWrite ? "Creating..." : "Start Writing →"}
-            </button>
+            <Button variant="success" size="default" onClick={handleStartWriting} disabled={startingWrite} leading={<PenLine size={13} />}>
+              {startingWrite ? "Creating..." : "Start Writing"}
+            </Button>
           )}
           {brief.sessionId && (
-            <button
-              onClick={() => router.push("/write")}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
-            >
-              Go to Writer →
-            </button>
+            <Button variant="primary" size="sm" onClick={() => router.push("/write")} trailing={<ChevronRight size={12} />}>
+              Go to Writer
+            </Button>
           )}
-          <button
-            onClick={handleDelete}
-            className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
-          >
-            Delete
-          </button>
+          <Button variant="ghost" size="icon" onClick={handleDelete} title="Delete brief">
+            <Trash2 size={14} />
+          </Button>
         </div>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg">
-          <div className="text-lg font-bold text-zinc-100">{data.headings.length}</div>
-          <div className="text-xs text-zinc-500">Headings</div>
+      {/* Stats strip */}
+      <div className="card flex items-stretch mb-4" style={{ overflow: "hidden" }}>
+        <div className="flex items-center gap-3 flex-1 flex-wrap" style={{ borderRight: "1px solid var(--border)" }}>
+          <StatCell label="Headings" value={data.headings.length} />
+          <StatCell label="Entities" value={data.entityMap.length} />
+          <StatCell label="Links" value={data.connectionMap.length} />
+          <StatCell label="Volume" value={formatVolume(totalVolume)} sub="/mo total" />
+          <StatCell label="Competitors" value={data.competitors.length} />
+          {data.knowledgeGaps.length > 0 && <StatCell label="Gaps" value={data.knowledgeGaps.length} />}
         </div>
-        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg">
-          <div className="text-lg font-bold text-zinc-100">{data.entityMap.length}</div>
-          <div className="text-xs text-zinc-500">Entities</div>
-        </div>
-        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg">
-          <div className="text-lg font-bold text-zinc-100">{data.connectionMap.length}</div>
-          <div className="text-xs text-zinc-500">Internal Links</div>
-        </div>
-        <div className="px-3 py-2 bg-zinc-800/50 rounded-lg">
-          <div className="text-lg font-bold text-zinc-100">{totalVolume.toLocaleString()}</div>
-          <div className="text-xs text-zinc-500">Total Volume</div>
-        </div>
+        {overallScore > 0 && (
+          <div className="flex items-center px-4">
+            <ScoreRing score={overallScore} size={62} />
+          </div>
+        )}
       </div>
 
-      {/* Contextual Vectors */}
-      <div className="mb-6">
-        <VectorChips vectors={data.contextualVectors} />
+      {/* Vectors + Gaps */}
+      {(data.contextualVectors.length > 0 || data.knowledgeGaps.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+          {data.contextualVectors.length > 0 && (
+            <div className="card card-pad">
+              <span className="eyebrow">Contextual Vectors</span>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {data.contextualVectors.map((v, i) => <Chip key={i}>{v}</Chip>)}
+              </div>
+            </div>
+          )}
+          {data.knowledgeGaps.length > 0 && (
+            <div className="card card-pad">
+              <span className="eyebrow" style={{ color: "var(--amber)" }}>Knowledge Gaps</span>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {data.knowledgeGaps.map((g, i) => <Chip key={i} tone="amber">{g}</Chip>)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1" style={{ borderBottom: "1px solid var(--border)" }}>
+        {visibleTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-colors whitespace-nowrap cursor-pointer"
+              style={{
+                color: activeTab === tab.id ? "var(--accent)" : "var(--text-2)",
+                borderBottom: activeTab === tab.id ? "2px solid var(--accent)" : "2px solid transparent",
+                marginBottom: "-1px",
+              }}
+            >
+              <Icon size={13} />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Knowledge Gaps */}
-      <div className="mb-6">
-        <KnowledgeGaps gaps={data.knowledgeGaps} />
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-zinc-800 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-2 text-sm transition-colors border-b-2 whitespace-nowrap ${
-              activeTab === tab.id
-                ? "text-zinc-100 border-blue-500"
-                : "text-zinc-500 border-transparent hover:text-zinc-300"
-            }`}
-          >
-            {tab.label}
-            {tab.count !== undefined && tab.count > 0 && (
-              <span className="ml-1.5 text-xs text-zinc-600">{tab.count}</span>
+      {/* Tab content */}
+      {activeTab === "outline" && (
+        <div className="grid gap-0" style={{ gridTemplateColumns: "1fr 380px" }}>
+          {/* Heading list */}
+          <div className="card" style={{ overflow: "hidden", borderRight: "none", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}>
+            {data.headings.length > 0 ? (
+              data.headings.map((h, i) => (
+                <HeadingRow key={i} heading={h} selected={selectedHeading === i} onSelect={() => setSelectedHeading(i)} />
+              ))
+            ) : (
+              <Empty icon="file" title="No headings" sub="Generate a brief to create headings" />
             )}
-          </button>
-        ))}
-      </div>
+          </div>
 
-      {/* Tab Content */}
-      <div className="bg-zinc-900/30 rounded-lg border border-zinc-800/50">
-        {activeTab === "headings" && (
-          <div>
-            {data.headings.map((h, i) => (
-              <HeadingRow
-                key={i}
-                heading={h}
-                index={i}
-                expanded={expandedHeading === i}
-                onToggle={() => setExpandedHeading(expandedHeading === i ? null : i)}
-                onEdit={(field, value) => editHeading(i, field, value)}
+          {/* Inspector */}
+          <div
+            className="card sticky top-0 self-start overflow-y-auto"
+            style={{
+              maxHeight: "calc(100vh - 200px)",
+              borderTopLeftRadius: 0,
+              borderBottomLeftRadius: 0,
+            }}
+          >
+            {selectedHeading !== null && data.headings[selectedHeading] ? (
+              <Inspector
+                heading={data.headings[selectedHeading]}
+                onEdit={(field, value) => editHeading(selectedHeading, field, value)}
               />
-            ))}
-            {data.headings.length === 0 && (
-              <div className="p-6 text-center text-zinc-600 text-sm">
-                No headings generated yet
+            ) : (
+              <div className="flex items-center justify-center h-full py-20">
+                <p className="text-[12px]" style={{ color: "var(--text-3)" }}>
+                  Select a heading to inspect
+                </p>
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === "analysis" && (
-          <AnalysisTab queryPreAnalysis={data.queryPreAnalysis} serpAnalysis={data.serpAnalysis} />
-        )}
-
-        {activeTab === "entities" && (
-          <div className="p-4">
-            <EntityList entities={data.entityMap} />
-          </div>
-        )}
-
-        {activeTab === "topical-map" && (
-          <TopicalMapTab topicalMap={data.topicalMap} />
-        )}
-
-        {activeTab === "connections" && (
-          <div className="p-4">
-            <ConnectionList connections={data.connectionMap} />
-          </div>
-        )}
-
-        {activeTab === "competitors" && (
-          <div className="p-4">
-            <CompetitorList competitors={data.competitors} deepAnalysis={data.deepCompetitorAnalysis} />
-          </div>
-        )}
-
-        {activeTab === "validation" && (
-          <ValidationTab headingValidation={data.headingValidation} qualityReport={data.qualityReport} />
-        )}
-      </div>
+      {activeTab === "analysis" && <AnalysisTab queryPreAnalysis={data.queryPreAnalysis} serpAnalysis={data.serpAnalysis} />}
+      {activeTab === "entities" && <EntitiesTab entities={data.entityMap} />}
+      {activeTab === "topics" && <TopicsTab topicalMap={data.topicalMap} />}
+      {activeTab === "links" && <LinksTab connections={data.connectionMap} />}
+      {activeTab === "competitors" && <CompetitorsTab competitors={data.competitors} deepAnalysis={data.deepCompetitorAnalysis} />}
+      {activeTab === "validation" && <ValidationTab headingValidation={data.headingValidation} qualityReport={data.qualityReport} />}
     </div>
   );
 }

@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { Plus, Search, Sparkles } from "lucide-react";
+import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
+import { StatusBadge } from "../../components/ui/status-badge";
+import { ScoreRing } from "../../components/ui/score-ring";
+import { Empty } from "../../components/ui/empty";
 import { BriefGenerator } from "../../components/BriefGenerator";
 
 interface BriefListItem {
@@ -15,19 +21,43 @@ interface BriefListItem {
   sessionId: string | null;
   createdAt: string;
   updatedAt: string;
+  qualityScore?: number;
+  totalVolume?: number;
 }
 
-const statusColors: Record<string, string> = {
-  draft: "bg-zinc-700 text-zinc-300",
-  reviewing: "bg-yellow-900/50 text-yellow-300 border border-yellow-800",
-  approved: "bg-green-900/50 text-green-300 border border-green-800",
-};
+type FilterTab = "all" | "draft" | "reviewing" | "approved";
+
+const FILTER_TABS: { id: FilterTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "draft", label: "Draft" },
+  { id: "reviewing", label: "Review" },
+  { id: "approved", label: "Approved" },
+];
+
+function QualityBar({ score }: { score: number }) {
+  const tone = score >= 80 ? "var(--mint)" : score >= 60 ? "var(--amber)" : "var(--coral)";
+  return (
+    <div className="flex items-center gap-2" style={{ minWidth: 100 }}>
+      <div className="flex-1 h-[5px] rounded-full" style={{ background: "var(--surface)" }}>
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${score}%`, background: tone }}
+        />
+      </div>
+      <span className="font-mono text-[12px] tabular-nums font-medium" style={{ color: tone, minWidth: 24, textAlign: "right" }}>
+        {score}
+      </span>
+    </div>
+  );
+}
 
 export default function BriefsPage() {
   const router = useRouter();
   const [briefs, setBriefs] = useState<BriefListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [filter, setFilter] = useState<FilterTab>("all");
+  const [search, setSearch] = useState("");
 
   const loadBriefs = useCallback(async () => {
     try {
@@ -36,11 +66,41 @@ export default function BriefsPage() {
         const data = await res.json();
         setBriefs(data.briefs || []);
       }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { loadBriefs(); }, [loadBriefs]);
+  useEffect(() => {
+    loadBriefs();
+  }, [loadBriefs]);
+
+  const filtered = useMemo(() => {
+    let list = briefs;
+    if (filter !== "all") {
+      list = list.filter((b) => b.status === filter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (b) =>
+          b.topic.toLowerCase().includes(q) ||
+          b.niche.toLowerCase().includes(q) ||
+          b.pageType.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [briefs, filter, search]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: briefs.length };
+    for (const b of briefs) {
+      c[b.status] = (c[b.status] || 0) + 1;
+    }
+    return c;
+  }, [briefs]);
 
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -52,11 +112,16 @@ export default function BriefsPage() {
   if (showNew) {
     return (
       <div>
-        <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => setShowNew(false)} className="text-zinc-400 hover:text-zinc-200 text-sm">
-            ← Back
-          </button>
-          <h1 className="text-xl font-bold text-zinc-100">New Brief</h1>
+        <div className="page-head">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setShowNew(false)}>
+              Briefs
+            </Button>
+            <div>
+              <h1 className="h1">New brief</h1>
+              <p className="text-sm muted mt-1">Generate from a topic, build manually, or paste an outline.</p>
+            </div>
+          </div>
         </div>
         <BriefGenerator />
       </div>
@@ -65,60 +130,132 @@ export default function BriefsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page head */}
+      <div className="page-head">
         <div>
-          <h1 className="text-xl font-bold text-zinc-100">Content Briefs</h1>
-          <p className="text-xs text-zinc-500 mt-1">
+          <h1 className="h1">Content Briefs</h1>
+          <p className="text-sm muted mt-1">
             AI-generated briefs with heading hierarchy, keyword mapping, and semantic rules
           </p>
         </div>
-        <button
-          onClick={() => setShowNew(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
-        >
-          + New Brief
-        </button>
+        <Button variant="primary" size="default" onClick={() => setShowNew(true)} leading={<Sparkles size={13} />}>
+          New Brief
+        </Button>
       </div>
 
-      {loading ? (
-        <div className="text-center text-zinc-500 mt-20">Loading...</div>
-      ) : briefs.length === 0 ? (
-        <div className="text-center text-zinc-500 mt-20">
-          <p className="text-lg mb-2">No briefs yet</p>
-          <p className="text-sm">Generate your first content brief to get started.</p>
+      {/* Filter tabs + search */}
+      <div className="flex items-center gap-4 mb-4 flex-wrap">
+        <div className="flex items-center gap-1">
+          {FILTER_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
+              className="px-3 py-1.5 rounded-[var(--radius)] text-[12px] font-medium transition-colors cursor-pointer"
+              style={{
+                background: filter === tab.id ? "var(--accent-soft)" : "transparent",
+                color: filter === tab.id ? "var(--accent)" : "var(--text-2)",
+              }}
+            >
+              {tab.label}
+              {counts[tab.id] !== undefined && (
+                <span className="ml-1.5 font-mono text-[11px] opacity-70">{counts[tab.id]}</span>
+              )}
+            </button>
+          ))}
         </div>
+        <div className="flex items-center gap-2 flex-1 max-w-[320px]">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-3)" }} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search briefs..."
+              className="input input-sm pl-8"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-sm muted pulse">Loading briefs...</div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <Empty
+          icon="file"
+          title={search || filter !== "all" ? "No matching briefs" : "No briefs yet"}
+          sub={search || filter !== "all" ? "Try adjusting your filters" : "Generate your first content brief to get started."}
+        >
+          {!search && filter === "all" && (
+            <Button variant="primary" size="sm" onClick={() => setShowNew(true)} leading={<Plus size={12} />}>
+              Create Brief
+            </Button>
+          )}
+        </Empty>
       ) : (
-        <div className="space-y-2">
-          {briefs.map((b) => (
+        <div className="card" style={{ overflow: "hidden" }}>
+          {/* Header row */}
+          <div
+            className="grid items-center gap-3 px-4 py-2"
+            style={{
+              gridTemplateColumns: "1fr 100px 90px 110px 80px 80px",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <span className="eyebrow">Topic</span>
+            <span className="eyebrow">Niche</span>
+            <span className="eyebrow">Type</span>
+            <span className="eyebrow">Quality</span>
+            <span className="eyebrow">Status</span>
+            <span className="eyebrow text-right">Updated</span>
+          </div>
+
+          {/* Rows */}
+          {filtered.map((b) => (
             <div
               key={b.id}
               onClick={() => router.push(`/briefs/${b.id}`)}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="grid items-center gap-3 px-4 py-3 transition-colors cursor-pointer"
+              style={{
+                gridTemplateColumns: "1fr 100px 90px 110px 80px 80px",
+                borderBottom: "1px solid var(--border)",
+                background: "transparent",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-zinc-100 truncate">{b.topic}</span>
-                  <span className={`px-2 py-0.5 rounded text-xs ${statusColors[b.status] || statusColors.draft}`}>
-                    {b.status}
+              <div className="min-w-0">
+                <div className="text-sm truncate" style={{ color: "var(--text-1)" }}>
+                  {b.topic}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-mono text-[10px]" style={{ color: "var(--text-3)" }}>
+                    v{b.version}
                   </span>
                   {b.sessionId && (
-                    <span className="text-[10px] text-blue-400">has writer session</span>
+                    <Badge tone="cyan" mono={false}>
+                      writer
+                    </Badge>
                   )}
                 </div>
-                <div className="text-xs text-zinc-500 mt-1">
-                  {b.niche} / {b.pageType}
-                  {b.location && ` / ${b.location}`}
-                  {" — "}v{b.version}
-                  {" — "}
-                  {new Date(b.updatedAt).toLocaleDateString()}
-                </div>
               </div>
-              <button
-                onClick={(e) => handleDelete(b.id, e)}
-                className="text-xs text-zinc-500 hover:text-red-400 ml-4 flex-shrink-0"
-              >
-                Delete
-              </button>
+              <span className="text-[12px] truncate" style={{ color: "var(--text-2)" }}>
+                {b.niche}
+              </span>
+              <Badge tone="default" mono={false}>
+                {b.pageType}
+              </Badge>
+              {b.qualityScore ? (
+                <QualityBar score={b.qualityScore} />
+              ) : (
+                <span className="text-[11px] muted">--</span>
+              )}
+              <StatusBadge status={b.status} />
+              <span className="text-[11px] text-right" style={{ color: "var(--text-3)" }}>
+                {new Date(b.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </span>
             </div>
           ))}
         </div>

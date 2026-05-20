@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { BriefEditor } from "../../../components/BriefEditor";
+import { Button } from "../../../components/ui/button";
+import { Empty } from "../../../components/ui/empty";
 import type { BriefData } from "../../../lib/types";
 
 export default function BriefDetailPage() {
@@ -34,17 +37,23 @@ export default function BriefDetailPage() {
   }, [id]);
 
   if (loading) {
-    return <div className="text-center text-zinc-500 mt-20">Loading brief...</div>;
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-sm muted pulse">Loading brief...</div>
+      </div>
+    );
   }
 
   if (error || !brief) {
     return (
-      <div className="text-center mt-20">
-        <p className="text-zinc-400 mb-2">{error || "Brief not found"}</p>
-        <a href="/briefs" className="text-sm text-blue-400 hover:text-blue-300">
-          ← Back to briefs
-        </a>
-      </div>
+      <Empty icon="alert" title={error || "Brief not found"} sub="The brief may have been deleted.">
+        <Button variant="ghost" size="sm" asChild>
+          <a href="/briefs">
+            <ArrowLeft size={13} />
+            Back to briefs
+          </a>
+        </Button>
+      </Empty>
     );
   }
 

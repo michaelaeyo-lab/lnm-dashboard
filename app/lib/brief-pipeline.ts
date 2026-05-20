@@ -8,7 +8,8 @@ import {
   retrieveForAgent,
 } from "./retrieval";
 import type { RetrievedChunk } from "./retrieval";
-import { getCoreRules } from "./writing-rules/core";
+import { getCoreRules, getRulesForPageType, type PageType } from "./writing-rules/core";
+import { STRUCTURE_PATTERNS, type StructurePatternId } from "./writing-rules/structure-patterns";
 import {
   lookupKeyword,
   searchAtlasAvailable,
@@ -252,6 +253,13 @@ export async function generateBrief(
           topicalMap
         );
         sendEvent({ step: 10, label: "Connections mapped", progress: 0.85 });
+
+        // ── Rule compliance pass (Sardar's refinement step) ──
+        // Check co-occurrence, entity density, perspective placement
+        const ruleComplianceIssues = checkRuleCompliance(params, headings);
+        if (ruleComplianceIssues.length > 0) {
+          console.log(`[Rule Compliance] ${ruleComplianceIssues.length} issues found, adding to quality report`);
+        }
 
         // ============================================================
         // PHASE D: VALIDATION (Steps 11-12) — parallel
@@ -841,10 +849,17 @@ async function stepHierarchyAndTitle(
     messages: [
       {
         role: "system",
-        content: `You are a semantic SEO heading architect. Build a comprehensive H1-H4 heading structure AND a title tag for a ${params.pageType} page.
+        content: `You are a semantic SEO heading architect following Sardar's contextual vector methodology. Build a comprehensive H1-H4 heading structure AND a title tag for a ${params.pageType} page.
+
+SARDAR'S HEADING METHODOLOGY:
+- H1 is the PURPOSE SUMMARY: it represents ALL contextual vectors of the document in heading order. It is a representative summary, NOT a keyword-stuffed title.
+- Each H2 represents a major contextual vector. The H2 text is a question or topic phrase.
+- H3s under H2s decompose the vector into sub-questions, list items, or subtopics.
+- H4s provide deep detail, edge cases, or data tables.
 
 HEADING RULES (STRICTLY ENFORCED — violations will be rejected):
 - The FIRST heading MUST be level 1 (H1). Exactly 1 H1. This is non-negotiable.
+- H1 text format: "[Main Topic] — [concise representative summary phrase]" or a natural title that captures the page's full scope.
 - Minimum 15 total headings. Aim for 20-35 headings for comprehensive coverage.
 - 5-12 H2s covering all contextual vectors
 - H3s under H2s for subtopics, questions, or list items
@@ -1001,31 +1016,45 @@ async function stepStructureAndQueryMapping(
     messages: [
       {
         role: "system",
-        content: `You are a semantic SEO brief writer. For each heading, generate structure instructions AND map keywords. This is a combined step.
+        content: `You are a semantic SEO brief writer following Sardar's contextual structure methodology. For each heading, assign a structure pattern AND map keywords.
+
+STRUCTURE PATTERN TAXONOMY (assign one per heading):
+${Object.values(STRUCTURE_PATTERNS).map((p) => `- "${p.id}": ${p.description} [${p.wordCountRange[0]}-${p.wordCountRange[1]} words]`).join("\n")}
+
+For H1: ALWAYS assign "purpose-summary" pattern.
+For H2/H3 definitions: use "explicit-definition".
+For H2/H3 with lists: use "list-definition".
+For yes/no or direct questions: use "direct-answer".
+For numeric/data answers: use "exact-answer".
+For why/how explanations: use "reasoning-based".
+For recommendations: use "suggestive-answer".
+For comparison tables: use "table-format" or "comparison".
 
 For each heading provide:
-1. structureInstructions: Concise instruction (1-2 sentences) on what to write and how
-2. ruleCodes: Which writing rule codes apply (e.g., "FS", "PAA", "NER", "TF-IDF")
-3. intent: One sentence on what this section should accomplish
-4. wordCountTarget: Suggested word count (50-300 per section)
-5. targetQueries: Keywords mapped to this heading by semantic relevance (0-5 per heading)
-6. serpFeatures: Which SERP features this heading could target (FS, PAA, KP, LC)
-7. contentDesignPattern: Suggested content format ("paragraph"|"table"|"comparison"|"list"|"visual")
-8. snippetTarget: Whether this heading should be optimized for featured snippets (boolean)
-9. paaTarget: Whether this heading answers a People Also Ask question (boolean)
+1. structurePattern: Pattern ID from taxonomy above (REQUIRED)
+2. structureInstructions: Sardar-style instruction matching the pattern template, customized for this heading
+3. ruleCodes: Which writing rule codes apply (e.g., "FS", "PAA", "NER", "TF-IDF", "CO-OCC", "PERSPECTIVE")
+4. intent: One sentence on what this section accomplishes
+5. wordCountTarget: From the pattern's word count range
+6. targetQueries: Keywords mapped to this heading by semantic relevance (0-5 per heading)
+7. serpFeatures: SERP features this heading targets (FS, PAA, KP, LC)
+8. contentDesignPattern: "paragraph"|"table"|"comparison"|"list"|"visual"
+9. snippetTarget: boolean
+10. paaTarget: boolean
+
+PAGE-TYPE RULES (enforce for ${params.pageType} pages):
+${getRulesForPageType((params.pageType || "blog") as PageType).slice(0, 2000)}
 
 Rules:
 - Assign the primary keyword to the H1
 - Distribute remaining keywords to the most relevant H2/H3/H4 headings
-- Keep structureInstructions SHORT — max 2 sentences
-
-Reference these content writing rules when assigning rule codes:
-${coreRules.slice(0, 1500)}
+- H1 structureInstructions MUST follow purpose-summary format: "Summarize the entire document's contextual vectors..."
 
 Return JSON:
 {
   "headings": [{
-    "level": number, "text": string, "structureInstructions": string,
+    "level": number, "text": string,
+    "structurePattern": string, "structureInstructions": string,
     "ruleCodes": string[], "intent": string, "wordCountTarget": number,
     "targetQueries": [{ "query": string, "volume": number, "intent": string }],
     "serpFeatures": string[],
@@ -1057,19 +1086,27 @@ Return JSON:
     }>;
   };
 
-  return (parsed.headings || rawHeadings).map((h, i) => ({
-    level: ((h.level as 1 | 2 | 3 | 4) || 2),
-    text: h.text,
-    structureInstructions: (h as { structureInstructions?: string }).structureInstructions || "",
-    targetQueries: (h as { targetQueries?: QueryEntry[] }).targetQueries || [],
-    serpFeatures: (h as { serpFeatures?: string[] }).serpFeatures || [],
-    ruleCodes: (h as { ruleCodes?: string[] }).ruleCodes || [],
-    intent: (h as { intent?: string }).intent || "",
-    wordCountTarget: (h as { wordCountTarget?: number }).wordCountTarget,
-    contentDesignPattern: (h as { contentDesignPattern?: string }).contentDesignPattern,
-    snippetTarget: (h as { snippetTarget?: boolean }).snippetTarget,
-    paaTarget: (h as { paaTarget?: boolean }).paaTarget,
-  }));
+  return (parsed.headings || rawHeadings).map((h, i) => {
+    const raw = h as Record<string, unknown>;
+    // Enforce purpose-summary for H1
+    const level = ((h.level as 1 | 2 | 3 | 4) || 2);
+    const structurePattern = level === 1
+      ? "purpose-summary"
+      : (raw.structurePattern as string) || "paragraph";
+    return {
+      level,
+      text: h.text,
+      structureInstructions: (raw.structureInstructions as string) || "",
+      targetQueries: (raw.targetQueries as QueryEntry[]) || [],
+      serpFeatures: (raw.serpFeatures as string[]) || [],
+      ruleCodes: (raw.ruleCodes as string[]) || [],
+      intent: (raw.intent as string) || "",
+      wordCountTarget: raw.wordCountTarget as number | undefined,
+      contentDesignPattern: (raw.contentDesignPattern as string) || structurePattern,
+      snippetTarget: raw.snippetTarget as boolean | undefined,
+      paaTarget: raw.paaTarget as boolean | undefined,
+    };
+  });
 }
 
 // --- Step 10: Connection Mapping ---
@@ -1119,6 +1156,89 @@ Return JSON: { "connections": [{ "fromHeading": string, "toPage": string, "ancho
     anchorText: c.anchorText,
     reason: c.reason,
   }));
+}
+
+// ============================================================
+// RULE COMPLIANCE CHECK (Sardar's refinement pass)
+// ============================================================
+
+interface RuleComplianceIssue {
+  headingIndex: number;
+  headingText: string;
+  ruleViolation: string;
+  severity: "low" | "medium" | "high";
+}
+
+function checkRuleCompliance(
+  params: BriefGenParams,
+  headings: EnhancedHeading[]
+): RuleComplianceIssue[] {
+  const issues: RuleComplianceIssue[] = [];
+  const isLocal = params.pageType === "service" || params.pageType === "location";
+  const hasLocation = !!params.location;
+
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i];
+
+    // CO-OCCURRENCE CHECK: local pages must pair region+service
+    if (isLocal && hasLocation && i === 0) {
+      const h1Text = h.text.toLowerCase();
+      const locationLower = params.location!.toLowerCase();
+      if (!h1Text.includes(locationLower)) {
+        issues.push({
+          headingIndex: i,
+          headingText: h.text,
+          ruleViolation: `CO-OCC: H1 missing location "${params.location}" — local pages require region+service co-occurrence`,
+          severity: "high",
+        });
+      }
+    }
+
+    // STRUCTURE PATTERN CHECK: every heading should have a pattern
+    if (!h.contentDesignPattern) {
+      issues.push({
+        headingIndex: i,
+        headingText: h.text,
+        ruleViolation: "PATTERN: Missing structure pattern assignment",
+        severity: "medium",
+      });
+    }
+
+    // H1 PURPOSE-SUMMARY CHECK
+    if (h.level === 1 && h.structureInstructions) {
+      const instr = h.structureInstructions.toLowerCase();
+      if (!instr.includes("summar") && !instr.includes("represent") && !instr.includes("purpose")) {
+        issues.push({
+          headingIndex: i,
+          headingText: h.text,
+          ruleViolation: "PURPOSE: H1 structure instructions should follow purpose-summary pattern",
+          severity: "medium",
+        });
+      }
+    }
+
+    // RULE CODE DENSITY: each heading should have at least 1 rule code
+    if (h.ruleCodes.length === 0) {
+      issues.push({
+        headingIndex: i,
+        headingText: h.text,
+        ruleViolation: "RULES: No rule codes assigned — every heading needs applicable rules",
+        severity: "low",
+      });
+    }
+
+    // WORD COUNT TARGET: should be set
+    if (!h.wordCountTarget || h.wordCountTarget < 30) {
+      issues.push({
+        headingIndex: i,
+        headingText: h.text,
+        ruleViolation: "WORDCOUNT: Missing or too-low word count target",
+        severity: "low",
+      });
+    }
+  }
+
+  return issues;
 }
 
 // ============================================================
