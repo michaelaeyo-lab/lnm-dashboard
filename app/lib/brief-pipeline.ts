@@ -468,6 +468,117 @@ function validateStepOutput(stepNum: number, output: unknown): StepValidationRes
  * Across multiple chunks from different briefs, we take the max Total Rows
  * found, or sum unique heading markers, or fall back to page-type benchmarks.
  */
+// --- Chain-of-Evidence Verification ---
+
+interface ChainOfEvidenceReport {
+  competitorTopicOverlap: { score: number; matched: string[]; total: number };
+  paaAddressed: { score: number; matched: string[]; total: number };
+  serpFeatureUtilization: { score: number; detected: string[]; utilized: string[] };
+  entityPropagation: { score: number; fromCompetitors: number; inBrief: number };
+  overallScore: number;
+}
+
+/**
+ * Verify that upstream SerpAPI + Firecrawl data actually influenced the
+ * generated brief. Programmatic cross-reference — no LLM needed.
+ */
+function verifyChainOfEvidence(
+  headings: EnhancedHeading[],
+  keywordData: KeywordResearchResult | null,
+  entityMap: EntityMapping[]
+): ChainOfEvidenceReport {
+  const headingTexts = headings.map((h) => h.text.toLowerCase());
+  const allHeadingWords = new Set(
+    headingTexts.flatMap((t) => t.split(/\s+/).filter((w) => w.length > 3))
+  );
+
+  // 1. Competitor topic overlap: do competitor heading topics appear in our headings?
+  const competitorHeadingTopics: string[] = [];
+  if (keywordData?.competitors) {
+    for (const comp of keywordData.competitors) {
+      for (const h of comp.headings || []) {
+        // Strip "H1: ", "H2: " prefix from Firecrawl extracted headings
+        const topic = h.replace(/^H\d:\s*/, "").toLowerCase();
+        if (topic.length > 3) competitorHeadingTopics.push(topic);
+      }
+    }
+  }
+  // Check if key words from competitor headings appear in our headings
+  const uniqueCompTopics = [...new Set(competitorHeadingTopics)];
+  const matchedTopics = uniqueCompTopics.filter((topic) => {
+    const topicWords = topic.split(/\s+/).filter((w) => w.length > 3);
+    // At least 2 content words from the competitor heading appear in our headings
+    const hits = topicWords.filter((w) => allHeadingWords.has(w));
+    return hits.length >= Math.min(2, topicWords.length);
+  });
+  const topicOverlapScore = Math.min(100, uniqueCompTopics.length > 0
+    ? Math.round((matchedTopics.length / Math.min(uniqueCompTopics.length, 15)) * 100)
+    : 0);
+
+  // 2. PAA addressed: are PAA questions addressed by at least one heading?
+  const paaQuestions = keywordData?.paa || [];
+  const matchedPaa = paaQuestions.filter((q) => {
+    const qWords = q.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    return qWords.some((w) => allHeadingWords.has(w));
+  });
+  const paaScore = paaQuestions.length > 0
+    ? Math.round((matchedPaa.length / paaQuestions.length) * 100)
+    : 100; // No PAA = not penalized
+
+  // 3. SERP feature utilization: do detected features inform structure patterns?
+  const detectedFeatures = keywordData?.serp?.features || [];
+  const patterns = headings.map((h) => h.structurePattern || h.contentDesignPattern || "").filter(Boolean);
+  const utilized: string[] = [];
+  if (detectedFeatures.includes("PAA") && patterns.some((p) => p.includes("faq") || p.includes("question"))) {
+    utilized.push("PAA→FAQ pattern");
+  }
+  if (detectedFeatures.includes("FS") && patterns.some((p) => p.includes("definition") || p.includes("answer") || p.includes("summary"))) {
+    utilized.push("FS→definition/answer pattern");
+  }
+  if (detectedFeatures.includes("Local Pack") && headings.some((h) => h.text.toLowerCase().includes("near") || h.text.toLowerCase().includes("local"))) {
+    utilized.push("Local Pack→local heading");
+  }
+  if (detectedFeatures.includes("Video") && patterns.some((p) => p.includes("media") || p.includes("video"))) {
+    utilized.push("Video→media pattern");
+  }
+  const featureScore = detectedFeatures.length > 0
+    ? Math.round((utilized.length / Math.min(detectedFeatures.length, 4)) * 100)
+    : 100;
+
+  // 4. Entity propagation: do entities from competitor analysis appear in brief?
+  const compEntityNames = new Set<string>();
+  if (keywordData?.competitors) {
+    for (const comp of keywordData.competitors) {
+      for (const h of comp.headings || []) {
+        // Extract potential entity-like words (capitalized terms, brand names)
+        const words = h.replace(/^H\d:\s*/, "").match(/[A-Z][a-z]{2,}/g);
+        if (words) words.forEach((w) => compEntityNames.add(w.toLowerCase()));
+      }
+    }
+  }
+  const briefEntityNames = new Set(entityMap.map((e) => e.entity.toLowerCase()));
+  const propagated = [...compEntityNames].filter((e) => briefEntityNames.has(e));
+  const entityScore = compEntityNames.size > 0
+    ? Math.round((propagated.length / Math.min(compEntityNames.size, 10)) * 100)
+    : 100;
+
+  const overallScore = Math.min(100, Math.round(
+    (topicOverlapScore * 0.35) + (paaScore * 0.25) + (featureScore * 0.2) + (entityScore * 0.2)
+  ));
+
+  const report: ChainOfEvidenceReport = {
+    competitorTopicOverlap: { score: topicOverlapScore, matched: matchedTopics.slice(0, 5), total: uniqueCompTopics.length },
+    paaAddressed: { score: paaScore, matched: matchedPaa.slice(0, 5), total: paaQuestions.length },
+    serpFeatureUtilization: { score: featureScore, detected: detectedFeatures, utilized },
+    entityPropagation: { score: entityScore, fromCompetitors: compEntityNames.size, inBrief: propagated.length },
+    overallScore,
+  };
+
+  console.log(`[Chain-of-Evidence] Overall: ${overallScore}/100 | Topics: ${topicOverlapScore} (${matchedTopics.length}/${uniqueCompTopics.length}) | PAA: ${paaScore} (${matchedPaa.length}/${paaQuestions.length}) | Features: ${featureScore} (${utilized.length}/${detectedFeatures.length}) | Entities: ${entityScore} (${propagated.length}/${compEntityNames.size})`);
+
+  return report;
+}
+
 /**
  * Programmatic quality gate — checks the brief against Sardar's structural rules.
  * No LLM comparison, no chunk parsing. Pure deterministic checks derived from
@@ -727,7 +838,14 @@ export async function generateBrief(
         const finalHeadings = useCorrected ? corrected : headings;
 
         // ============================================================
-        // GOLD-STANDARD CROSS-REFERENCE (programmatic, after Step 12)
+        // CHAIN-OF-EVIDENCE VERIFICATION (after Step 12)
+        // ============================================================
+
+        const chainOfEvidence = verifyChainOfEvidence(finalHeadings, keywordData, entityMap);
+        qualityReport.chainOfEvidence = chainOfEvidence;
+
+        // ============================================================
+        // PROGRAMMATIC QUALITY GATE (after Step 12)
         // ============================================================
 
         const goldStandardCrossRef = programmaticQualityGate(

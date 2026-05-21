@@ -347,6 +347,13 @@ export interface BriefQualityReport {
   knowledgeGaps: string[];
   recommendations: string[];
   goldStandardCrossRef?: GoldStandardCrossRef;
+  chainOfEvidence?: {
+    competitorTopicOverlap: { score: number; matched: string[]; total: number };
+    paaAddressed: { score: number; matched: string[]; total: number };
+    serpFeatureUtilization: { score: number; detected: string[]; utilized: string[] };
+    entityPropagation: { score: number; fromCompetitors: number; inBrief: number };
+    overallScore: number;
+  };
 }
 
 export interface BriefData {
