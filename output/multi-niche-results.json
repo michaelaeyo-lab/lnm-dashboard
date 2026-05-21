@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-21T01:01:36.819Z",
+  "timestamp": "2026-05-21T01:43:06.691Z",
   "passCriteria": {
     "csvScore": "≥70",
     "pipelineQuality": "≥70",
@@ -10,10 +10,10 @@
       "name": "Bristol Home Removal (service)",
       "pageType": "service",
       "niche": "removal",
-      "headingsCount": 5,
+      "headingsCount": 25,
       "csvValid": true,
       "csvScore": 100,
-      "pipelineQuality": 78,
+      "pipelineQuality": 85,
       "goldStandardCrossRef": 100,
       "pass": true
     },
@@ -21,7 +21,7 @@
       "name": "Emergency Locksmith Manchester (location)",
       "pageType": "location",
       "niche": "locksmith",
-      "headingsCount": 21,
+      "headingsCount": 22,
       "csvValid": true,
       "csvScore": 100,
       "pipelineQuality": 85,
@@ -32,7 +32,18 @@
       "name": "How to Choose a Moving Company (blog)",
       "pageType": "blog",
       "niche": "moving",
-      "headingsCount": 25,
+      "headingsCount": 10,
+      "csvValid": true,
+      "csvScore": 100,
+      "pipelineQuality": 78,
+      "goldStandardCrossRef": 83,
+      "pass": true
+    },
+    {
+      "name": "Professional Teeth Whitening London (service)",
+      "pageType": "service",
+      "niche": "dental",
+      "headingsCount": 37,
       "csvValid": true,
       "csvScore": 100,
       "pipelineQuality": 85,
@@ -40,21 +51,10 @@
       "pass": true
     },
     {
-      "name": "Professional Teeth Whitening London (service)",
-      "pageType": "service",
-      "niche": "dental",
-      "headingsCount": 18,
-      "csvValid": true,
-      "csvScore": 87,
-      "pipelineQuality": 85,
-      "goldStandardCrossRef": 83,
-      "pass": true
-    },
-    {
       "name": "Best CRM Software for Small Business (landing)",
       "pageType": "landing",
       "niche": "saas",
-      "headingsCount": 25,
+      "headingsCount": 24,
       "csvValid": true,
       "csvScore": 100,
       "pipelineQuality": 85,
