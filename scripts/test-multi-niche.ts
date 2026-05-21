@@ -10,6 +10,7 @@ import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { resolve } from "path";
 import { generateBrief, type BriefGenParams } from "../app/lib/brief-pipeline";
 import { validateBriefAgainstCsvFormat } from "../app/lib/csv-validation";
+import { getPrisma } from "../app/lib/db";
 import type { EnhancedBrief, QueryEntry } from "../app/lib/types";
 
 const outputDir = resolve(process.cwd(), "output");
@@ -178,6 +179,21 @@ async function main() {
   console.log("║      MULTI-NICHE BRIEF VALIDATION SUITE        ║");
   console.log("╚══════════════════════════════════════════════════╝\n");
 
+  // --- DB setup: find or create a user for persisting test briefs ---
+  const prisma = getPrisma();
+  let testUser = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  if (!testUser) {
+    testUser = await prisma.user.create({
+      data: {
+        email: "system@lnm.local",
+        name: "System (Test Briefs)",
+        role: "admin",
+      },
+    });
+    console.log(`  Created system user: ${testUser.id}`);
+  }
+  console.log(`  Saving briefs to DB under user: ${testUser.email}\n`);
+
   const results: TestResult[] = [];
 
   for (let i = 0; i < testCases.length; i++) {
@@ -191,6 +207,21 @@ async function main() {
       const brief = await runBrief(tc.params);
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
       console.log(`\n  Generated in ${elapsed}s`);
+
+      // Persist full brief to database
+      const savedBrief = await prisma.brief.create({
+        data: {
+          userId: testUser.id,
+          topic: tc.params.topic,
+          pageType: tc.params.pageType,
+          niche: tc.params.niche,
+          location: tc.params.location || null,
+          clientName: "Multi-Niche Sample",
+          status: "reviewing",
+          data: brief as unknown as Record<string, unknown>,
+        },
+      });
+      console.log(`  Saved to DB: ${savedBrief.id}`);
 
       // CSV validation
       const csvResult = validateBriefAgainstCsvFormat(brief);
