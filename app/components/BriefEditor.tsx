@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Download,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -25,6 +26,7 @@ import { StatusBadge } from "./ui/status-badge";
 import { ScoreRing } from "./ui/score-ring";
 import { Empty } from "./ui/empty";
 import { cn } from "../lib/utils";
+import { briefToCsvString } from "../lib/csv-validation";
 import type {
   BriefData,
   EnhancedBrief,
@@ -648,6 +650,17 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
     router.push("/briefs");
   }
 
+  function handleDownloadCsv() {
+    const csvString = briefToCsvString(data);
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${brief.topic.replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-")}-brief.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const totalVolume = data.headings.reduce((sum, h) => sum + h.targetQueries.reduce((s, q) => s + q.volume, 0), 0);
   const overallScore = data.qualityReport?.overallScore ?? 0;
 
@@ -707,6 +720,9 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
               Go to Writer
             </Button>
           )}
+          <Button variant="ghost" size="icon" onClick={handleDownloadCsv} title="Download CSV">
+            <Download size={14} />
+          </Button>
           <Button variant="ghost" size="icon" onClick={handleDelete} title="Delete brief">
             <Trash2 size={14} />
           </Button>
