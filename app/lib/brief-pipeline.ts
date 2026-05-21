@@ -1479,6 +1479,55 @@ async function stepHierarchyAndTitle(
     .map((c) => `${c.title}: ${c.weaknesses.join("; ")}`)
     .join("\n");
 
+  // --- Programmatic heading candidate extraction from competitor data ---
+  // Parse competitor headings, deduplicate by theme, classify as REQUIRED vs SUGGESTED
+  const allCompetitorH2s: string[] = [];
+  for (const comp of keywordData?.competitors || []) {
+    for (const h of comp.headings) {
+      const match = h.match(/^H[12]:\s*(.+)/i);
+      if (match) allCompetitorH2s.push(match[1].trim());
+    }
+  }
+
+  // Deduplicate similar headings (normalize and count frequency)
+  const headingFrequency = new Map<string, { original: string; count: number }>();
+  for (const h of allCompetitorH2s) {
+    const normalized = h.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+    const existing = headingFrequency.get(normalized);
+    if (existing) {
+      existing.count++;
+    } else {
+      headingFrequency.set(normalized, { original: h, count: 1 });
+    }
+  }
+
+  // Topics appearing in 2+ competitors = REQUIRED (SERP consensus)
+  // Topics in only 1 competitor = SUGGESTED
+  const requiredTopics: string[] = [];
+  const suggestedTopics: string[] = [];
+  for (const [, entry] of headingFrequency) {
+    if (entry.count >= 2) {
+      requiredTopics.push(entry.original);
+    } else {
+      suggestedTopics.push(entry.original);
+    }
+  }
+
+  // SERP gaps from analysis are also SUGGESTED
+  const serpGapTopics = serpAnalysis.serpGaps.slice(0, 5);
+
+  const headingCandidatesContext = [
+    requiredTopics.length > 0
+      ? `REQUIRED HEADING TOPICS (SERP consensus — 2+ competitors cover these, you MUST include):\n${requiredTopics.map((t) => `- ${t}`).join("\n")}`
+      : "",
+    suggestedTopics.length > 0
+      ? `SUGGESTED HEADING TOPICS (single competitor or gap opportunity):\n${suggestedTopics.slice(0, 10).map((t) => `- ${t}`).join("\n")}`
+      : "",
+    serpGapTopics.length > 0
+      ? `SERP GAP TOPICS (differentiation — no competitor covers these well):\n${serpGapTopics.map((t) => `- ${t}`).join("\n")}`
+      : "",
+  ].filter(Boolean).join("\n\n");
+
   const methodologyCtx8 = await getStepMethodologyContext(8, params.topic);
 
   const response = await getOpenAI().chat.completions.create({
@@ -1555,6 +1604,7 @@ ${competitorWeaknesses || "none identified"}
 
 ${paaQuestions ? `People Also Ask:\n- ${paaQuestions}\n` : ""}
 ${competitorHeadings ? `Competitor Headings:\n${competitorHeadings}\n` : ""}
+${headingCandidatesContext ? `\n${headingCandidatesContext}\n` : ""}
 ${briefExamples ? `Similar Brief Examples:\n${briefExamples}` : ""}`,
       },
     ],
@@ -1666,6 +1716,30 @@ Keep the existing headings but ADD missing depth. Cover: contextual vectors, edg
     }
   }
 
+  // --- Post-step grounding check ---
+  // Verify each H2 maps to a competitor heading topic or SERP gap
+  if (requiredTopics.length > 0) {
+    const h2Headings = headings.filter((h) => h.level === 2);
+    for (const h2 of h2Headings) {
+      const h2Lower = h2.text.toLowerCase();
+      const grounded = requiredTopics.some((rt) => {
+        const rtLower = rt.toLowerCase();
+        // Check if heading text overlaps significantly with a required topic
+        const rtWords = rtLower.split(/\s+/);
+        const matchingWords = rtWords.filter((w) => w.length > 3 && h2Lower.includes(w));
+        return matchingWords.length >= Math.ceil(rtWords.length * 0.4);
+      }) || serpGapTopics.some((sg) => {
+        const sgLower = sg.toLowerCase();
+        const sgWords = sgLower.split(/\s+/);
+        const matchingWords = sgWords.filter((w) => w.length > 3 && h2Lower.includes(w));
+        return matchingWords.length >= Math.ceil(sgWords.length * 0.4);
+      });
+      if (!grounded) {
+        console.warn(`[Step 8] H2 "${h2.text}" not grounded in competitor research or SERP gaps`);
+      }
+    }
+  }
+
   return {
     rawHeadings: headings,
     titleTag: parsed.titleTag || {
@@ -1712,6 +1786,25 @@ async function stepStructureAndQueryMapping(
     .map((c) => `${c.title}: ${c.contentDesignPatterns.join(", ")}`)
     .join("\n");
 
+  // Extract specific competitor content items for Sardar-style instructions
+  const competitorContentItems: string[] = [];
+  for (const comp of deepCompetitors.competitors) {
+    if (comp.strengths.length > 0) {
+      competitorContentItems.push(...comp.strengths.map((s) => `[${comp.title}] ${s}`));
+    }
+  }
+  if (deepCompetitors.gapKeywords?.length) {
+    competitorContentItems.push(...deepCompetitors.gapKeywords.map((k) => `Gap opportunity: ${k}`));
+  }
+  const competitorItemsContext = competitorContentItems.slice(0, 30).join("\n");
+
+  // Extract specific heading topics competitors cover (for grounding instructions)
+  const competitorHeadingTopics = (keywordData?.competitors || [])
+    .flatMap((c) => c.headings)
+    .filter(Boolean)
+    .slice(0, 40)
+    .join("\n");
+
   const methodologyCtx9 = await getStepMethodologyContext(9, params.topic);
 
   const response = await getOpenAI().chat.completions.create({
@@ -1727,7 +1820,68 @@ async function stepStructureAndQueryMapping(
 ${methodologyCtx9}
 
 ## TASK
-For each heading, assign a structure pattern AND map keywords following the methodology above.
+For each heading, assign a structure pattern AND write Sardar-style structure instructions AND map keywords.
+
+CRITICAL: structureInstructions must be PRESCRIPTIVE WRITING DIRECTIVES with specific content items from the competitor research — NOT generic pattern labels or descriptions.
+
+### SARDAR-STYLE INSTRUCTION TEMPLATES (follow these formats EXACTLY):
+
+**purpose-summary** (H1 only):
+"Purpose: Summarize the entire document (contextual vectors) in a representative manner using the same order.
+Instructions: implicit definition of [TOPIC] in a (representative way)
++ [vector 1 — use actual contextual vectors provided]
++ [vector 2 — specific content from competitor research]
++ [vector 3 — etc.]
+This is the summary of whole [PAGE_TYPE] page${params.clientName ? ` of \\"${params.clientName}\\"` : ""} so try use paragraph format"
+
+**explicit-definition** (H2/H3):
+"Explicit Definition: What is [HEADING TOPIC]? Use signifier, qualifier, and enriching context terms.
+The answer should be context-rich, accurate and clear.
+[Optional sub-question: Is X the same as Y? Direct Answer: Yes or No]"
+
+**direct-answer** (H2/H3/H4):
+"Direct Answer: [Yes/No] [restate topic]... then reason or justification.
+Answer should be accurate, clear and context-rich. Under [40] words or [220] characters.
+[Include specific facts/entities from competitor research that MUST appear]"
+
+**list-definition** (H2/H3):
+"List Definition:
+List Intro: [contextual opening sentence using topic terms]...
+[Item 1 — specific item derived from competitor/SERP research]
+[Item 2 — specific item]
+[Item 3 — etc.]
+List Outro: summary or whole answer justification.
+DO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE"
+
+**reasoning-based** (H2/H3):
+"Start answering: [restate the heading question]... then explain exact process based on available information.
+[List specific content items from competitor research to include]
+Please write correct accurate and context rich answer in paragraph format.
+Remember more text doesn't mean more context"
+
+**table-format** (H2/H3):
+"Create one table with [N] columns: [column 1 — specific data category], [column 2 — specific data], [column 3 — specific data].
+[Row expectations with specific entities/prices/data from research]
+Table outro: final words with context-rich terms."
+
+**exact-answer** (H3/H4):
+"[State the exact number/value/boolean]. Then source attribution and data breakdown.
+Include: [specific data points from competitor research]"
+
+**suggestive-answer** (H2/H3):
+"Start answering: [recommendation statement]... [conditions under which it applies].
+Include: [specific evidence items from competitor research]"
+
+### INSTRUCTION WRITING RULES (NON-NEGOTIABLE):
+1. EVERY structureInstructions MUST contain SPECIFIC content items drawn from the competitor data, SERP consensus, or entities provided in the user message — NOT generic placeholders like "[relevant items]"
+2. For list-definition: enumerate the ACTUAL list items the writer must cover (extracted from competitor research)
+3. For direct-answer: specify the Yes/No value AND include word/character limits (e.g., "under 40 words or 220 characters")
+4. For table-format: specify exact column names and what data goes in each row
+5. For purpose-summary (H1): list each contextual vector as a "+" prefixed line item
+6. Include format constraints: "paragraph format", "under 40 words", "under 220 characters" where appropriate
+7. Include quality guards: "remember more text doesn't mean more context" for reasoning sections, "DO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE" for list sections
+8. Reference the client/brand name where the heading mentions it${params.clientName ? ` (client: ${params.clientName})` : ""}
+9. Sub-questions within instructions are encouraged — e.g., after an explicit definition, add "Is [X] the same as [Y]? Direct Answer: Yes or No"
 
 STRUCTURE PATTERN TAXONOMY (assign one per heading):
 ${Object.values(STRUCTURE_PATTERNS).map((p) => `- "${p.id}": ${p.description} [${p.wordCountRange[0]}-${p.wordCountRange[1]} words]`).join("\n")}
@@ -1743,7 +1897,7 @@ For comparison tables: use "table-format" or "comparison".
 
 For each heading provide:
 1. structurePattern: Pattern ID from taxonomy above (REQUIRED)
-2. structureInstructions: Sardar-style instruction matching the pattern template, customized for this heading
+2. structureInstructions: Sardar-style prescriptive writing directive (REQUIRED — must follow templates above with SPECIFIC content items, NOT generic descriptions)
 3. ruleCodes: Which writing rule codes apply (e.g., "FS", "PAA", "NER", "TF-IDF", "CO-OCC", "PERSPECTIVE")
 4. intent: One sentence on what this section accomplishes
 5. wordCountTarget: From the pattern's word count range
@@ -1762,8 +1916,10 @@ HARD RULES (violations will be rejected):
 - EVERY H3 heading SHOULD have at least 1 targetQuery unless there are truly no semantically relevant keywords left.
 - Distribute ALL provided keywords across headings. Every keyword must appear in at least one heading's targetQueries.
 - If there are more headings than keywords, derive natural-language queries from the heading text itself (e.g., heading "Types of Home Removal Services" → query "types of home removal services").
-- H1 structureInstructions MUST follow purpose-summary format: "Summarize the entire document's contextual vectors in heading order using a representative paragraph..."
+- H1 structureInstructions MUST use "Purpose: Summarize the entire document..." format with "+" prefixed vector items — NOT a generic summary statement.
 - H1 structurePattern MUST be "purpose-summary" (not "paragraph")
+- structureInstructions that contain ONLY generic descriptions (e.g., "Provide a direct answer followed by contextual explanation") will be REJECTED. They MUST contain specific content items.
+- EVERY list-definition MUST enumerate at least 4 specific list items. EVERY table-format MUST specify column names and data expectations.
 
 Return JSON:
 {
@@ -1779,7 +1935,7 @@ Return JSON:
       },
       {
         role: "user",
-        content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nNiche: ${params.niche}\n\nHeadings to annotate:\n${rawHeadings.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\n${keywordList ? `Keywords to map:\n${keywordList}\n` : ""}${designPatterns ? `\nCompetitor design patterns for reference:\n${designPatterns}\n` : ""}${ruleContext ? `\nRule Application Examples:\n${ruleContext}` : ""}`,
+        content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nNiche: ${params.niche}${params.clientName ? `\nClient: ${params.clientName}` : ""}${params.location ? `\nLocation: ${params.location}` : ""}\n\nHeadings to annotate:\n${rawHeadings.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\n${keywordList ? `Keywords to map:\n${keywordList}\n` : ""}${competitorItemsContext ? `\nCOMPETITOR CONTENT ITEMS (use these specific facts/entities in structureInstructions):\n${competitorItemsContext}\n` : ""}${competitorHeadingTopics ? `\nCOMPETITOR HEADING TOPICS (topics competitors cover — reference in instructions):\n${competitorHeadingTopics}\n` : ""}${designPatterns ? `\nCompetitor design patterns:\n${designPatterns}\n` : ""}${ruleContext ? `\nRule Application Examples:\n${ruleContext}` : ""}`,
       },
     ],
   });
