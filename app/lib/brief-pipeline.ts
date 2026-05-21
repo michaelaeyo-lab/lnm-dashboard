@@ -51,7 +51,8 @@ function getOpenAI() {
 
 /**
  * Safely parse JSON from LLM output. Handles truncated responses by
- * attempting to repair common issues (missing closing brackets/braces).
+ * attempting to repair common issues (missing closing brackets/braces,
+ * unterminated strings, dangling keys/values).
  */
 function safeParseJSON<T>(text: string): T {
   // First try direct parse
@@ -64,16 +65,16 @@ function safeParseJSON<T>(text: string): T {
   // Strip markdown code fences if present
   let cleaned = text.replace(/^```json?\s*/i, "").replace(/```\s*$/, "").trim();
 
-  // Try again
+  // Try again after stripping fences
   try {
     return JSON.parse(cleaned) as T;
   } catch {
     // ignore
   }
 
-  // Attempt to repair truncated JSON by closing open brackets/braces
-  let openBraces = 0;
-  let openBrackets = 0;
+  // Stack-based repair for truncated JSON.
+  // Track nesting ORDER so closers are emitted in correct sequence.
+  const stack: Array<"{" | "["> = [];
   let inString = false;
   let escaped = false;
 
@@ -82,23 +83,68 @@ function safeParseJSON<T>(text: string): T {
     if (ch === "\\") { escaped = true; continue; }
     if (ch === '"') { inString = !inString; continue; }
     if (inString) continue;
-    if (ch === "{") openBraces++;
-    if (ch === "}") openBraces--;
-    if (ch === "[") openBrackets++;
-    if (ch === "]") openBrackets--;
+    if (ch === "{") stack.push("{");
+    if (ch === "[") stack.push("[");
+    if (ch === "}" || ch === "]") stack.pop();
   }
 
   // If we're inside a string, close it
   if (inString) cleaned += '"';
 
-  // Remove trailing comma before closing
+  // Remove dangling key-without-value (e.g., truncated at `..."someKey":` or `..."someKe`)
+  // After closing any unterminated string, trim incomplete trailing structure:
+  //   - trailing colon (key parsed but no value) → add null
+  //   - trailing comma → remove it
   cleaned = cleaned.replace(/,\s*$/, "");
+  if (/:\s*$/.test(cleaned)) {
+    cleaned += "null";
+  }
 
-  // Close open structures
-  for (let i = 0; i < openBrackets; i++) cleaned += "]";
-  for (let i = 0; i < openBraces; i++) cleaned += "}";
+  // Close open structures in correct (reverse) order
+  while (stack.length > 0) {
+    const opener = stack.pop()!;
+    // Remove trailing comma before each closer
+    cleaned = cleaned.replace(/,\s*$/, "");
+    cleaned += opener === "{" ? "}" : "]";
+  }
 
-  return JSON.parse(cleaned) as T;
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (e) {
+    // Last resort: try to extract the largest valid JSON prefix.
+    // Walk backward removing characters until it parses.
+    for (let end = cleaned.length - 1; end > cleaned.length * 0.5; end--) {
+      const slice = cleaned.slice(0, end);
+      // Try closing any remaining open structures on this slice
+      const s2: Array<"{" | "["> = [];
+      let inStr2 = false;
+      let esc2 = false;
+      for (const ch of slice) {
+        if (esc2) { esc2 = false; continue; }
+        if (ch === "\\") { esc2 = true; continue; }
+        if (ch === '"') { inStr2 = !inStr2; continue; }
+        if (inStr2) continue;
+        if (ch === "{") s2.push("{");
+        if (ch === "[") s2.push("[");
+        if (ch === "}" || ch === "]") s2.pop();
+      }
+      let attempt = slice;
+      if (inStr2) attempt += '"';
+      attempt = attempt.replace(/,\s*$/, "");
+      while (s2.length > 0) {
+        const op = s2.pop()!;
+        attempt = attempt.replace(/,\s*$/, "");
+        attempt += op === "{" ? "}" : "]";
+      }
+      try {
+        return JSON.parse(attempt) as T;
+      } catch {
+        continue;
+      }
+    }
+    // If nothing works, throw the original error
+    throw e;
+  }
 }
 
 // --- Types ---
@@ -1671,7 +1717,7 @@ async function stepStructureAndQueryMapping(
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
-    max_tokens: 8192,
+    max_tokens: 16384,
     response_format: { type: "json_object" },
     messages: [
       {
