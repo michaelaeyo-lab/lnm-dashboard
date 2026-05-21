@@ -21,7 +21,7 @@ import {
   type KeywordResearchResult,
   type KeywordData,
   type SerpOverview,
-} from "./searchatlas";
+} from "./lnm-serpdata-agent";
 import type {
   EnhancedBrief,
   EnhancedHeading,
