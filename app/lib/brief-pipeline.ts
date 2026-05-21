@@ -1918,8 +1918,26 @@ HARD RULES (violations will be rejected):
 - If there are more headings than keywords, derive natural-language queries from the heading text itself (e.g., heading "Types of Home Removal Services" → query "types of home removal services").
 - H1 structureInstructions MUST use "Purpose: Summarize the entire document..." format with "+" prefixed vector items — NOT a generic summary statement.
 - H1 structurePattern MUST be "purpose-summary" (not "paragraph")
-- structureInstructions that contain ONLY generic descriptions (e.g., "Provide a direct answer followed by contextual explanation") will be REJECTED. They MUST contain specific content items.
+- structureInstructions that contain ONLY generic descriptions (e.g., "Provide a direct answer followed by contextual explanation" or "Define and describe X") will be REJECTED. They MUST contain specific content items, format directives, and quality guards.
+- EVERY structureInstructions MUST be at least 80 characters long with multi-line prescriptive content. One-sentence summaries are NEVER acceptable.
 - EVERY list-definition MUST enumerate at least 4 specific list items. EVERY table-format MUST specify column names and data expectations.
+
+EXAMPLE of a CORRECT heading output (study this format carefully):
+{
+  "level": 2, "text": "What to know before attending festivals in Bristol?",
+  "structurePattern": "list-definition",
+  "structureInstructions": "List Definition:\\nList Intro: when attending festivals in Bristol...\\nTicket pricing and early bird discounts\\nTransport and parking options (Temple Meads station, Park & Ride)\\nAccommodation availability during peak festival season\\nWeather preparation (Bristol's average summer rainfall)\\nAccessibility information and provisions\\nFood and drink vendors and dietary options\\nList Outro: summary or whole answer justification.\\nDO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE",
+  "ruleCodes": ["FS", "PAA", "NER"], "intent": "Provide practical checklist for festival-goers",
+  "wordCountTarget": 300,
+  "targetQueries": [{"query": "Bristol festival tips", "volume": 100, "intent": "informational"}],
+  "serpFeatures": ["FS"], "contentDesignPattern": "list", "snippetTarget": true, "paaTarget": false
+}
+
+EXAMPLE of an INCORRECT heading (DO NOT produce this):
+{
+  "structureInstructions": "Highlight what attendees should know before going to festivals."
+}
+This is REJECTED because it is a generic one-line description with no specific content items, no format directive, and no quality guard.
 
 Return JSON:
 {
@@ -1933,6 +1951,75 @@ Return JSON:
   }]
 }`,
       },
+      // Few-shot example: show the LLM exactly what correct output looks like
+      {
+        role: "user",
+        content: `Topic: Domestic Home Removal Service in Bristol\nPage Type: service\nNiche: removal\nClient: Mo Transport\nLocation: Bristol\n\nHeadings to annotate:\n# Expert House Moving and Home Removal Services in Bristol by Mo Transport\n## What is a home moving?\n## What to know before moving home in Bristol?\n## What are the steps involved in moving to a new home?\n\nKeywords to map:\nhome removals (600/mo, commercial)\nhouse removal companies (450/mo, commercial)`,
+      },
+      {
+        role: "assistant",
+        content: JSON.stringify({
+          headings: [
+            {
+              level: 1,
+              text: "Expert House Moving and Home Removal Services in Bristol by Mo Transport",
+              structurePattern: "purpose-summary",
+              structureInstructions: "Purpose: Summarize the entire document (contextual vectors) in a representative manner using the same order.\nInstructions: implicit definition of Domestic home moving or removal in a (representative way)\n+ Things to know before moving in Bristol\n+ Steps involved in moving to a new home\n+ Is moving home in Bristol worth it\n+ Cost of moving 4 bedroom home within Bristol\n+ Is Mo Transport offer Domestic home removal services in Bristol (types of services also)\n+ Main benefits of hiring Mo Transport professional domestic home removal company\nThis is the summary of whole service page of \"Mo Transport\" so try use paragraph format",
+              ruleCodes: ["FS", "NER", "TF-IDF", "CO-OCC"],
+              intent: "Represent all contextual vectors of the document in heading order as a representative paragraph",
+              wordCountTarget: 250,
+              targetQueries: [{ query: "home removals", volume: 600, intent: "commercial" }],
+              serpFeatures: ["FS"],
+              contentDesignPattern: "paragraph",
+              snippetTarget: true,
+              paaTarget: false,
+            },
+            {
+              level: 2,
+              text: "What is a home moving?",
+              structurePattern: "explicit-definition",
+              structureInstructions: "Explicit Definition of What is a home moving?: use signifier, qualifier, and enriching context terms.\nThe answer should be context rich, accurate and clear.\n\nIs home removal the same as home moving?\n\nDirect Answer: Yes or No",
+              ruleCodes: ["FS", "PAA", "NER"],
+              intent: "Define home moving using signifier-qualifier format with context-rich terms",
+              wordCountTarget: 140,
+              targetQueries: [{ query: "house removal companies", volume: 450, intent: "commercial" }],
+              serpFeatures: ["FS", "PAA"],
+              contentDesignPattern: "paragraph",
+              snippetTarget: true,
+              paaTarget: true,
+            },
+            {
+              level: 2,
+              text: "What to know before moving home in Bristol?",
+              structurePattern: "list-definition",
+              structureInstructions: "List Definition:\nList Intro: when moving home in Bristol...\nCost of living\nNeighbourhood\nCulture\nTenancy end date\nCouncil tax\nPublic transport\nSafety\nList Outro: summary or whole answer justification.\n\nDO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE",
+              ruleCodes: ["FS", "PAA", "NER", "CO-OCC"],
+              intent: "Provide a structured checklist of considerations before moving home in Bristol",
+              wordCountTarget: 300,
+              targetQueries: [{ query: "home removals", volume: 600, intent: "commercial" }],
+              serpFeatures: ["FS"],
+              contentDesignPattern: "list",
+              snippetTarget: true,
+              paaTarget: false,
+            },
+            {
+              level: 2,
+              text: "What are the steps involved in moving to a new home?",
+              structurePattern: "reasoning-based",
+              structureInstructions: "Start answering: these are seven steps...\nChange your address\nTransfer utilities\nDeclutter\nPack an essentials bag\nLabel all boxes\nDeep clean\nGet a security system installed\n\nPlease write correct accurate and context rich answer in paragraph format.\nRemember more text doesn't mean more context",
+              ruleCodes: ["FS", "PAA", "NER"],
+              intent: "Walk through the step-by-step process of moving to a new home",
+              wordCountTarget: 220,
+              targetQueries: [{ query: "house removal companies", volume: 450, intent: "commercial" }],
+              serpFeatures: ["FS"],
+              contentDesignPattern: "paragraph",
+              snippetTarget: true,
+              paaTarget: false,
+            },
+          ],
+        }),
+      },
+      // Real request
       {
         role: "user",
         content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nNiche: ${params.niche}${params.clientName ? `\nClient: ${params.clientName}` : ""}${params.location ? `\nLocation: ${params.location}` : ""}\n\nHeadings to annotate:\n${rawHeadings.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\n${keywordList ? `Keywords to map:\n${keywordList}\n` : ""}${competitorItemsContext ? `\nCOMPETITOR CONTENT ITEMS (use these specific facts/entities in structureInstructions):\n${competitorItemsContext}\n` : ""}${competitorHeadingTopics ? `\nCOMPETITOR HEADING TOPICS (topics competitors cover — reference in instructions):\n${competitorHeadingTopics}\n` : ""}${designPatterns ? `\nCompetitor design patterns:\n${designPatterns}\n` : ""}${ruleContext ? `\nRule Application Examples:\n${ruleContext}` : ""}`,
