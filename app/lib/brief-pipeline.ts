@@ -468,118 +468,97 @@ function validateStepOutput(stepNum: number, output: unknown): StepValidationRes
  * Across multiple chunks from different briefs, we take the max Total Rows
  * found, or sum unique heading markers, or fall back to page-type benchmarks.
  */
-function parseGoldHeadingCounts(chunks: RetrievedChunk[]): number {
-  // Collect Total Rows from any chunk that has it
-  let maxTotalRows = 0;
-  const allHeadingTexts = new Set<string>();
-
-  for (const chunk of chunks) {
-    const totalRowsMatch = chunk.content.match(/\*\*Total Rows:\*\*\s*(\d+)/);
-    if (totalRowsMatch) {
-      maxTotalRows = Math.max(maxTotalRows, parseInt(totalRowsMatch[1], 10));
-    }
-
-    // Collect unique heading texts to avoid double-counting across overlapping chunks
-    const lines = chunk.content.split("\n");
-    for (const line of lines) {
-      const m = line.trim().match(/^#{2,5}\s+(H[1-4]):\s*(.+)/);
-      if (m) allHeadingTexts.add(`${m[1]}:${m[2].trim().toLowerCase()}`);
-    }
-  }
-
-  if (maxTotalRows > 0) return maxTotalRows;
-  if (allHeadingTexts.size >= 5) return allHeadingTexts.size;
-
-  // Chunks were too fragmentary — use page-type benchmarks from Sardar's methodology
-  // (service/location: 20-25, blog/landing: 25-30)
-  return 22; // conservative midpoint
-}
-
 /**
- * Compare a generated brief against gold-standard briefs from category 19.
- * Returns a cross-reference score (0-100) with per-dimension PASS/WARN.
+ * Programmatic quality gate — checks the brief against Sardar's structural rules.
+ * No LLM comparison, no chunk parsing. Pure deterministic checks derived from
+ * what makes gold-standard CSVs good: query coverage on H1/H2, structure instructions
+ * on every heading, pattern diversity, entity density, proper hierarchy, and depth.
  */
-async function crossReferenceGoldStandard(
-  brief: EnhancedBrief,
-  topic: string,
-  pageType: string
-): Promise<GoldStandardCrossRef> {
+function programmaticQualityGate(
+  brief: EnhancedBrief
+): GoldStandardCrossRef {
   const checks: Record<string, "PASS" | "WARN"> = {};
   let passCount = 0;
+  const TOTAL_DIMENSIONS = 6;
+  const headings = brief.headings || [];
+  const headingCount = headings.length;
 
-  try {
-    const goldBriefs = await retrieveSimilarBriefs(topic, pageType, 3);
-
-    if (goldBriefs.length === 0) {
-      console.log("[Gold-Standard Cross-Ref] No gold-standard briefs found — skipping");
-      return { score: 50, checks: { heading_count: "WARN", query_density: "WARN", pattern_diversity: "WARN", entity_density: "WARN" } };
-    }
-
-    // Parse heading count across all retrieved chunks
-    const goldHeadingCount = parseGoldHeadingCounts(goldBriefs);
-    const briefHeadingCount = brief.headings.length;
-
-    console.log(`[Gold-Standard Cross-Ref] Gold briefs: ${goldBriefs.length} | gold heading benchmark: ${goldHeadingCount} | brief headings: ${briefHeadingCount}`);
-
-    // --- Dimension 1: Heading count similarity (±30% of benchmark) ---
-    const headingRatio = briefHeadingCount / Math.max(goldHeadingCount, 1);
-    if (headingRatio >= 0.7 && headingRatio <= 1.3) {
-      checks.heading_count = "PASS";
-      passCount++;
-    } else {
-      checks.heading_count = "WARN";
-    }
-
-    // --- Dimension 2: Query density (queries per heading) ---
-    // Gold-standard CSVs have 1-3 queries per heading row.
-    // Methodology benchmark: every H1/H2 has ≥1 query, H3s ideally 1.
-    // Target density: ~1.0 queries/heading.
-    const GOLD_QUERY_DENSITY = 1.0;
-    const briefTotalQueries = brief.headings.reduce(
-      (sum, h) => sum + (h.targetQueries?.length || 0), 0
-    );
-    const briefQueryDensity = briefTotalQueries / Math.max(briefHeadingCount, 1);
-    if (briefQueryDensity >= GOLD_QUERY_DENSITY * 0.8) {
-      checks.query_density = "PASS";
-      passCount++;
-    } else {
-      checks.query_density = "WARN";
-    }
-
-    // --- Dimension 3: Structure pattern diversity (≥3 unique patterns) ---
-    const uniquePatterns = new Set(
-      brief.headings
-        .map((h) => h.structurePattern || h.contentDesignPattern)
-        .filter(Boolean)
-    );
-    if (uniquePatterns.size >= 3) {
-      checks.pattern_diversity = "PASS";
-      passCount++;
-    } else {
-      checks.pattern_diversity = "WARN";
-    }
-
-    // --- Dimension 4: Entity density (entities per heading) ---
-    // Gold-standard briefs average ~0.5-1.5 entities per heading.
-    // Generated briefs should have at least 0.35 entities/heading.
-    const GOLD_ENTITY_DENSITY = 0.5;
-    const briefEntityDensity = brief.entityMap.length / Math.max(briefHeadingCount, 1);
-    if (briefEntityDensity >= GOLD_ENTITY_DENSITY * 0.7) {
-      checks.entity_density = "PASS";
-      passCount++;
-    } else {
-      checks.entity_density = "WARN";
-    }
-
-    const score = Math.round((passCount / 4) * 100);
-    const checkSummary = Object.entries(checks).map(([k, v]) => `${k}: ${v}`).join(" | ");
-    console.log(`[Gold-Standard Cross-Ref] Score: ${score}/100 | ${checkSummary}`);
-
-    return { score, checks };
-  } catch (err) {
-    console.warn("[Gold-Standard Cross-Ref] Failed, proceeding without:", err);
-    return { score: 0, checks: { heading_count: "WARN", query_density: "WARN", pattern_diversity: "WARN", entity_density: "WARN" } };
+  // --- 1. H1/H2 Query Coverage (≥90% of H1/H2 must have ≥1 targetQuery) ---
+  const h1h2 = headings.filter((h) => h.level <= 2);
+  const h1h2WithQueries = h1h2.filter((h) => (h.targetQueries?.length || 0) > 0);
+  const h1h2Coverage = h1h2.length > 0 ? h1h2WithQueries.length / h1h2.length : 0;
+  if (h1h2Coverage >= 0.9) {
+    checks.h1_h2_query_coverage = "PASS";
+    passCount++;
+  } else {
+    checks.h1_h2_query_coverage = "WARN";
   }
+
+  // --- 2. Structure Instructions Coverage (≥80% of headings have instructions ≥10 chars) ---
+  const withInstructions = headings.filter(
+    (h) => h.structureInstructions && h.structureInstructions.trim().length >= 10
+  );
+  const structCoverage = headingCount > 0 ? withInstructions.length / headingCount : 0;
+  if (structCoverage >= 0.8) {
+    checks.structure_coverage = "PASS";
+    passCount++;
+  } else {
+    checks.structure_coverage = "WARN";
+  }
+
+  // --- 3. Pattern Diversity (≥3 unique structure patterns) ---
+  const uniquePatterns = new Set(
+    headings
+      .map((h) => h.structurePattern || h.contentDesignPattern)
+      .filter(Boolean)
+  );
+  if (uniquePatterns.size >= 3) {
+    checks.pattern_diversity = "PASS";
+    passCount++;
+  } else {
+    checks.pattern_diversity = "WARN";
+  }
+
+  // --- 4. Entity Coverage (≥0.3 entities per heading) ---
+  const entityDensity = (brief.entityMap?.length || 0) / Math.max(headingCount, 1);
+  if (entityDensity >= 0.3) {
+    checks.entity_coverage = "PASS";
+    passCount++;
+  } else {
+    checks.entity_coverage = "WARN";
+  }
+
+  // --- 5. Hierarchy Valid (starts with H1, no level skips like H1→H3) ---
+  let hierarchyValid = headingCount > 0 && headings[0].level === 1;
+  if (hierarchyValid) {
+    for (let i = 1; i < headings.length; i++) {
+      if (headings[i].level > headings[i - 1].level + 1) {
+        hierarchyValid = false;
+        break;
+      }
+    }
+  }
+  if (hierarchyValid) {
+    checks.hierarchy_valid = "PASS";
+    passCount++;
+  } else {
+    checks.hierarchy_valid = "WARN";
+  }
+
+  // --- 6. Heading Depth (must have H1 + at least one H2 + at least one H3) ---
+  const levels = new Set(headings.map((h) => h.level));
+  if (levels.has(1) && levels.has(2) && levels.has(3)) {
+    checks.heading_depth = "PASS";
+    passCount++;
+  } else {
+    checks.heading_depth = "WARN";
+  }
+
+  const score = Math.round((passCount / TOTAL_DIMENSIONS) * 100);
+  const checkSummary = Object.entries(checks).map(([k, v]) => `${k}: ${v}`).join(" | ");
+  console.log(`[Quality Gate] ${passCount}/${TOTAL_DIMENSIONS} passed | Score: ${score}/100 | ${checkSummary}`);
+
+  return { score, checks };
 }
 
 // --- Pipeline ---
@@ -751,10 +730,8 @@ export async function generateBrief(
         // GOLD-STANDARD CROSS-REFERENCE (programmatic, after Step 12)
         // ============================================================
 
-        const goldStandardCrossRef = await crossReferenceGoldStandard(
-          { contextualVectors, headings: finalHeadings, entityMap, connectionMap, competitors: [], knowledgeGaps: qualityReport.knowledgeGaps },
-          params.topic,
-          params.pageType
+        const goldStandardCrossRef = programmaticQualityGate(
+          { contextualVectors, headings: finalHeadings, entityMap, connectionMap, competitors: [], knowledgeGaps: qualityReport.knowledgeGaps }
         );
         qualityReport.goldStandardCrossRef = goldStandardCrossRef;
 

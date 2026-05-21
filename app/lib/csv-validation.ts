@@ -179,10 +179,15 @@ export function validateBriefAgainstCsvFormat(brief: EnhancedBrief): CsvValidati
     }
   }
 
-  // 5. Score calculation
+  // 5. Score calculation — proportional to heading count
+  // Errors are absolute (critical structural failures), warnings are proportional
+  // (more headings = more chances for warnings, so normalize by heading count).
   const errorCount = issues.filter((i) => i.severity === "error").length;
   const warnCount = issues.filter((i) => i.severity === "warning").length;
-  const score = Math.max(0, 100 - errorCount * 20 - warnCount * 5);
+  const headingTotal = headings.length || 1;
+  const warningRate = warnCount / headingTotal;
+  const warningPenalty = Math.round(warningRate * 80);
+  const score = Math.max(0, 100 - errorCount * 20 - warningPenalty);
 
   return {
     valid: errorCount === 0,
