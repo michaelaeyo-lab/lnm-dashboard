@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -18,6 +18,9 @@ import {
   ChevronRight,
   ExternalLink,
   Download,
+  RefreshCw,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -573,6 +576,14 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
   const [dirty, setDirty] = useState(false);
   const [startingWrite, setStartingWrite] = useState(false);
 
+  // Regeneration state
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenStep, setRegenStep] = useState(0);
+  const [regenProgress, setRegenProgress] = useState(0);
+  const [regenLabel, setRegenLabel] = useState("");
+  const [regenError, setRegenError] = useState<string | null>(null);
+  const regenAbortRef = useRef<AbortController | null>(null);
+
   const editHeading = useCallback((index: number, field: string, value: string) => {
     setData((prev) => ({
       ...prev,
@@ -661,6 +672,97 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
     URL.revokeObjectURL(url);
   }
 
+  async function handleRegenerate() {
+    if (!confirm("Regenerate this brief? This will re-run the full 12-step pipeline with the latest systems and replace the current brief data.")) return;
+
+    setRegenerating(true);
+    setRegenError(null);
+    setRegenStep(0);
+    setRegenProgress(0);
+    setRegenLabel("Starting pipeline...");
+
+    const controller = new AbortController();
+    regenAbortRef.current = controller;
+
+    try {
+      const res = await fetch(`/api/briefs/${brief.id}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error (${res.status})`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No stream");
+
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = decoder.decode(value, { stream: true });
+        for (const line of text.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6);
+          if (raw === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.step) {
+              setRegenStep(parsed.step);
+              setRegenProgress(parsed.progress);
+              setRegenLabel(parsed.label);
+            }
+            if (parsed.done && parsed.brief) {
+              setRegenProgress(1);
+              setRegenLabel("Brief regenerated!");
+              // Reload the brief data
+              const freshRes = await fetch(`/api/briefs/${brief.id}`);
+              if (freshRes.ok) {
+                const freshBrief = await freshRes.json();
+                setBrief(freshBrief);
+                setData(freshBrief.data);
+                setDirty(false);
+                setSelectedHeading(freshBrief.data.headings?.length > 0 ? 0 : null);
+              }
+              setTimeout(() => setRegenerating(false), 1200);
+              return;
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== "No stream") throw e;
+          }
+        }
+      }
+
+      // If stream ended without a done event, reload anyway
+      const freshRes = await fetch(`/api/briefs/${brief.id}`);
+      if (freshRes.ok) {
+        const freshBrief = await freshRes.json();
+        setBrief(freshBrief);
+        setData(freshBrief.data);
+        setDirty(false);
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      setRegenError(err instanceof Error ? err.message : "Regeneration failed");
+    } finally {
+      setRegenerating(false);
+      regenAbortRef.current = null;
+    }
+  }
+
+  function handleCancelRegenerate() {
+    regenAbortRef.current?.abort();
+    setRegenerating(false);
+  }
+
   const totalVolume = data.headings.reduce((sum, h) => sum + h.targetQueries.reduce((s, q) => s + q.volume, 0), 0);
   const overallScore = data.qualityReport?.overallScore ?? 0;
 
@@ -720,6 +822,16 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
               Go to Writer
             </Button>
           )}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleRegenerate}
+            disabled={regenerating || saving}
+            leading={<RefreshCw size={12} />}
+            title="Re-run the 12-step pipeline with latest systems"
+          >
+            Regenerate
+          </Button>
           <Button variant="ghost" size="icon" onClick={handleDownloadCsv} title="Download CSV">
             <Download size={14} />
           </Button>
@@ -728,6 +840,85 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
           </Button>
         </div>
       </div>
+
+      {/* Regeneration progress */}
+      {regenerating && (
+        <div className="card card-pad mb-4 slidein">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <RefreshCw size={14} className="animate-spin" style={{ color: "var(--accent)" }} />
+              <span className="h3">Regenerating brief</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-sm tabular-nums">
+                <span style={{ color: "var(--accent)" }}>{Math.round(regenProgress * 100)}%</span>
+                <span className="muted"> · step {Math.min(regenStep, 12)} / 12</span>
+              </span>
+              <Button variant="ghost" size="icon" onClick={handleCancelRegenerate} title="Cancel">
+                <X size={13} />
+              </Button>
+            </div>
+          </div>
+          <div className="mb-3 rounded-full" style={{ height: 5, background: "var(--surface)" }}>
+            <div
+              className="rounded-full transition-all"
+              style={{
+                height: 5,
+                width: `${Math.round(regenProgress * 100)}%`,
+                background: regenProgress >= 1 ? "var(--mint)" : "var(--accent)",
+              }}
+            />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {[
+              { id: 1, label: "Researching keywords & SERP data" },
+              { id: 2, label: "Retrieving knowledge base" },
+              { id: 3, label: "Collecting competitor data" },
+              { id: 4, label: "Analyzing query intent & audience" },
+              { id: 5, label: "Analyzing SERP patterns" },
+              { id: 6, label: "Analyzing competitors in depth" },
+              { id: 7, label: "Mapping contextual vectors & entities" },
+              { id: 8, label: "Building heading hierarchy & title" },
+              { id: 9, label: "Generating structure & mapping queries" },
+              { id: 10, label: "Mapping internal connections" },
+              { id: 11, label: "Validating heading quality" },
+              { id: 12, label: "Scoring brief quality" },
+            ].map((s) => {
+              const done = regenStep > s.id;
+              const active = regenStep === s.id;
+              if (!done && !active) return null;
+              return (
+                <div key={s.id} className="flex items-center gap-2 py-1 text-[12px]">
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      display: "grid",
+                      placeItems: "center",
+                      background: done ? "var(--mint-soft)" : "var(--accent-soft)",
+                      color: done ? "var(--mint)" : "var(--accent)",
+                      fontSize: 9,
+                    }}
+                  >
+                    {done ? <Check size={9} /> : <span className="inline-block w-[4px] h-[4px] rounded-full pulse" style={{ background: "var(--accent)" }} />}
+                  </span>
+                  <span style={{ color: done ? "var(--text-2)" : "var(--text-1)", fontWeight: active ? 500 : 400 }}>
+                    {s.label}
+                  </span>
+                  {active && <span className="font-mono text-[10px] muted pulse ml-auto">running</span>}
+                  {done && <span className="font-mono text-[10px] ml-auto" style={{ color: "var(--mint)" }}>done</span>}
+                </div>
+              );
+            })}
+          </div>
+          {regenError && (
+            <div className="mt-3 p-3 rounded-[var(--radius)] text-sm" style={{ background: "var(--coral-soft)", color: "var(--coral)" }}>
+              {regenError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats strip */}
       <div className="card flex items-stretch mb-4" style={{ overflow: "hidden" }}>
