@@ -124,6 +124,13 @@ export interface EnhancedHeading {
   // V3 fields — Sardar's brief structure (optional, backward compatible)
   structurePattern?: string; // from taxonomy: "purpose-summary" | "explicit-definition" | "list-definition" | etc.
   connections?: ConnectionEntry[]; // per-heading internal links
+  contextualRationale?: {
+    levelJustification: string;
+    patternRationale: string;
+    readerIntent: string;
+    evidenceBasis: string;
+    hierarchyRole: string;
+  };
   queryGroups?: {
     group1: QueryEntry[];
     group2: QueryEntry[];

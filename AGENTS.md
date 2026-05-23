@@ -17,7 +17,22 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Uses `briefToCsvString()` from `app/lib/csv-validation.ts` (no server-only guard, safe for client)
 - Client-side blob download, filename: `{topic}-brief.csv`
 
-### 3. Step 8-9 Methodology Alignment (Sardar-style contextual structures)
+### 3. Contextual Hierarchy Rationale Panel (UI)
+- `app/components/brief/ContextualHierarchyPanel.tsx` — new component showing heading hierarchy with rationale bubbles
+- Added as "Hierarchy" tab in `app/components/BriefEditor.tsx` (between Outline and Analysis)
+- `app/lib/types.ts` — `EnhancedHeading` now has optional `contextualRationale` field (5 sub-fields: levelJustification, patternRationale, readerIntent, evidenceBasis, hierarchyRole)
+- Uses existing design tokens (--amber/--cyan/--violet/--mint for H1/H2/H3/H4)
+- Features: collapsible rows with indent guides, level/search filtering, copy-to-clipboard for structure instructions, SEO metadata grid
+- Falls back gracefully when `contextualRationale` is missing (older briefs)
+- **Pipeline PARTIALLY updated** — Step 9 system prompt now requests `contextualRationale` (field 11 in the "For each heading provide:" list, ~line 2008). BUT the following still need updating:
+  1. The `Return JSON:` schema block (~line 2055) — add contextualRationale to the JSON shape
+  2. The few-shot assistant example (~line 2072) — add contextualRationale to each example heading
+  3. The continuation chunk system prompt (~line 2175) — add contextualRationale requirement + JSON shape
+  4. The `Step9Heading` type (~line 2142) — add contextualRationale field
+  5. Post-processing: normalize serpFeatures ("Featured Snippet" → "FS", "People Also Ask" → "PAA") in the post-processing section (~line 2197+)
+- Design reference: `output/debug/design_handoff_contextual_hierarchy/` (prototype + screenshots)
+
+### 4. Step 8-9 Methodology Alignment (Sardar-style contextual structures)
 
 **Step 9** (`stepStructureAndQueryMapping` in `app/lib/brief-pipeline.ts` ~line 1729):
 - System prompt now contains Sardar-style instruction templates for each pattern:
@@ -39,10 +54,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Key Files
 - `app/lib/brief-pipeline.ts` — 12-step brief generation pipeline (core)
+- `app/lib/types.ts` — All TypeScript types (EnhancedHeading, EnhancedBrief, etc.)
 - `app/lib/lnm-serpdata-agent.ts` — SERP data (SerpAPI + Firecrawl + SearchAtlas)
 - `app/lib/csv-validation.ts` — CSV format validation + `briefToCsvString()` export
 - `app/lib/writing-rules/structure-patterns.ts` — Structure pattern taxonomy
-- `app/components/BriefEditor.tsx` — Brief editor UI with CSV download
+- `app/components/BriefEditor.tsx` — Brief editor UI with tabs (Outline, Hierarchy, Analysis, etc.)
+- `app/components/brief/ContextualHierarchyPanel.tsx` — Contextual hierarchy rationale panel
 - `scripts/test-festival-brief.ts` — Test script for festival in Bristol (Step 9 output validation)
 
 ## Gold-Standard CSVs (reference for Sardar methodology)

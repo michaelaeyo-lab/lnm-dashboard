@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Check,
   X,
+  Layers,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -30,6 +31,7 @@ import { ScoreRing } from "./ui/score-ring";
 import { Empty } from "./ui/empty";
 import { cn } from "../lib/utils";
 import { briefToCsvString } from "../lib/csv-validation";
+import { ContextualHierarchyPanel } from "./brief/ContextualHierarchyPanel";
 import type {
   BriefData,
   EnhancedBrief,
@@ -44,10 +46,11 @@ import type {
   BriefQualityReport,
 } from "../lib/types";
 
-type TabId = "outline" | "analysis" | "entities" | "topics" | "links" | "competitors" | "validation";
+type TabId = "outline" | "hierarchy" | "analysis" | "entities" | "topics" | "links" | "competitors" | "validation";
 
 const TAB_CONFIG: { id: TabId; label: string; icon: typeof FileText; conditionalKey?: keyof EnhancedBrief }[] = [
   { id: "outline", label: "Outline", icon: FileText },
+  { id: "hierarchy", label: "Hierarchy", icon: Layers },
   { id: "analysis", label: "Analysis", icon: BarChart3 },
   { id: "entities", label: "Entities", icon: Tags },
   { id: "topics", label: "Topics", icon: Map, conditionalKey: "topicalMap" },
@@ -1020,6 +1023,11 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
         </div>
       )}
 
+      {activeTab === "hierarchy" && (
+        <div className="card card-pad">
+          <ContextualHierarchyPanel items={data.headings} defaultExpanded={[0]} />
+        </div>
+      )}
       {activeTab === "analysis" && <AnalysisTab queryPreAnalysis={data.queryPreAnalysis} serpAnalysis={data.serpAnalysis} />}
       {activeTab === "entities" && <EntitiesTab entities={data.entityMap} />}
       {activeTab === "topics" && <TopicsTab topicalMap={data.topicalMap} />}

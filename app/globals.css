@@ -1,7 +1,6 @@
-@import "tailwindcss";
-
 /* ── Geist font import (loaded via next/font in layout.tsx, this is fallback) ── */
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
 
 /* ── Tailwind 4 theme tokens ── */
 @theme inline {

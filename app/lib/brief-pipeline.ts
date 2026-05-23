@@ -949,7 +949,7 @@ export async function generateBrief(
 
 // --- Step 1: Topic Research + Extended Keyword Data ---
 
-async function stepTopicResearch(
+export async function stepTopicResearch(
   params: BriefGenParams
 ): Promise<KeywordResearchResult | null> {
   // Try SearchAtlas first
@@ -996,7 +996,7 @@ async function stepTopicResearch(
 
 // --- Step 2: Knowledge Base Retrieval ---
 
-async function stepKnowledgeRetrieval(
+export async function stepKnowledgeRetrieval(
   params: BriefGenParams
 ): Promise<KnowledgeContext> {
   const pageType = params.pageType as "service" | "location" | "blog" | "landing";
@@ -1018,7 +1018,7 @@ async function stepKnowledgeRetrieval(
 
 // --- Step 3: Competitor Data Collection ---
 
-async function stepCompetitorDataCollection(
+export async function stepCompetitorDataCollection(
   params: BriefGenParams,
   keywordData: KeywordResearchResult | null
 ): Promise<CompetitorDataset> {
@@ -1088,7 +1088,7 @@ async function stepCompetitorDataCollection(
 
 // --- Step 4: Query & Intent Pre-Analysis ---
 
-async function stepQueryPreAnalysis(
+export async function stepQueryPreAnalysis(
   params: BriefGenParams,
   keywordData: KeywordResearchResult | null,
   competitorDataset: CompetitorDataset
@@ -1164,7 +1164,7 @@ Guidelines:
 
 // --- Step 5: SERP Pattern Analysis ---
 
-async function stepSerpAnalysis(
+export async function stepSerpAnalysis(
   keywordData: KeywordResearchResult | null,
   competitorDataset: CompetitorDataset,
   topic?: string
@@ -1255,7 +1255,7 @@ Guidelines:
 
 // --- Step 6: Deep Competitor Analysis ---
 
-async function stepDeepCompetitorAnalysis(
+export async function stepDeepCompetitorAnalysis(
   keywordData: KeywordResearchResult | null,
   competitorDataset: CompetitorDataset
 ): Promise<DeepCompetitorAnalysisResult> {
@@ -1349,7 +1349,7 @@ Guidelines:
 
 // --- Step 7: Contextual Vectors + Entities + Topical Map ---
 
-async function stepContextualVectors(
+export async function stepContextualVectors(
   params: BriefGenParams,
   keywordData: KeywordResearchResult | null,
   knowledgeContext: KnowledgeContext,
@@ -1394,7 +1394,11 @@ ${methodologyCtx7}
 ## TASK
 Extract the complete semantic foundation for this page following the methodology.
 
-1. Contextual Vectors: 8-15 topical coverage areas the page must address. Each vector is a short phrase (3-6 words). Include vectors for SERP consensus AND gap opportunities. Cover root attributes, supporting attributes, contextual qualifiers, edge-case attributes, hidden informational layers, and unique semantic nuances.
+1. Contextual Vectors: 8-20 items that form the document outline. These are NOT generic topic labels — they are the ACTUAL headings, questions, and content items that will appear in the document. Vectors should be:
+   - Question phrases from PAA data (e.g., "What should you know before attending a festival in Bristol?")
+   - Named entities that will each get their own section (e.g., "Bristol International Balloon Fiesta", "Bristol Pride", "Upfest")
+   - List titles (e.g., "Best Festivals in Bristol")
+   The first vector should be the list/overview section title. Then list the most important named entities (up to 5-8). Then list question-phrased vectors from PAA or natural reader queries. Include vectors for SERP consensus AND gap opportunities.
 
 2. Entity Map: Extract ALL primary entities, secondary entities, attributes, predicates, modifiers, qualifiers, and semantic dependencies. Include BOTH explicit entities directly mentioned and implicit entities users and search engines expect.
 
@@ -1439,7 +1443,7 @@ Return JSON:
 
 // --- Step 8: Heading Hierarchy + Title Tag ---
 
-async function stepHierarchyAndTitle(
+export async function stepHierarchyAndTitle(
   params: BriefGenParams,
   contextualVectors: string[],
   topicalMap: TopicalMapEntry[],
@@ -1516,6 +1520,34 @@ async function stepHierarchyAndTitle(
   // SERP gaps from analysis are also SUGGESTED
   const serpGapTopics = serpAnalysis.serpGaps.slice(0, 5);
 
+  // Extract named entities from cross-competitor data AND competitor H3 headings — each becomes an individual H3
+  // H3 headings in competitor pages are typically individual entity names (festivals, services, etc.)
+  const competitorH3Entities: string[] = [];
+  for (const comp of keywordData?.competitors || []) {
+    for (const h of comp.headings) {
+      const match = h.match(/^H3:\s*(.+)/i);
+      if (match) {
+        const text = match[1].trim();
+        // Skip generic subtopics, keep named entities (proper nouns, multi-word names)
+        if (text.length > 3 && !text.toLowerCase().startsWith("the ") && !/^(about|contact|home|menu|more|other|our |the )/i.test(text)) {
+          competitorH3Entities.push(text);
+        }
+      }
+    }
+  }
+  // Combine cross-competitor entities + competitor H3 names, deduplicate
+  const entitySet = new Set<string>();
+  const namedEntities: string[] = [];
+  for (const e of [...deepCompetitors.crossCompetitorEntities, ...competitorH3Entities]) {
+    const key = e.toLowerCase().trim();
+    if (!entitySet.has(key) && key.length > 2) {
+      entitySet.add(key);
+      namedEntities.push(e);
+    }
+  }
+  // Cap at 30
+  namedEntities.splice(30);
+
   const headingCandidatesContext = [
     requiredTopics.length > 0
       ? `REQUIRED HEADING TOPICS (SERP consensus — 2+ competitors cover these, you MUST include):\n${requiredTopics.map((t) => `- ${t}`).join("\n")}`
@@ -1525,6 +1557,9 @@ async function stepHierarchyAndTitle(
       : "",
     serpGapTopics.length > 0
       ? `SERP GAP TOPICS (differentiation — no competitor covers these well):\n${serpGapTopics.map((t) => `- ${t}`).join("\n")}`
+      : "",
+    namedEntities.length > 0
+      ? `NAMED ENTITIES (each MUST become an individual H3 under the list H2 — do NOT omit any):\n${namedEntities.map((e, i) => `${i + 1}. ${e}`).join("\n")}`
       : "",
   ].filter(Boolean).join("\n\n");
 
@@ -1546,24 +1581,25 @@ ${methodologyCtx8}
 Build a comprehensive H1-H4 heading structure AND a title tag for a ${params.pageType} page.
 
 SARDAR'S HEADING METHODOLOGY:
-- H1 is the PURPOSE SUMMARY: it represents ALL contextual vectors of the document in heading order. It is a representative summary, NOT a keyword-stuffed title.
-- Each H2 represents a major contextual vector. The H2 text is a question or topic phrase.
-- H3s under H2s decompose the vector into sub-questions, list items, or subtopics.
-- H4s provide deep detail, edge cases, or data tables.
+- H1 is the PURPOSE SUMMARY: a representative title capturing the page's full scope. Format: "[Number] Best/Top [Topic] for [qualifier]" or a natural title.
+- H2s are QUESTION-PHRASED headings derived from People Also Ask (PAA) data and search queries. NOT topic labels. Example: "What are the most popular Festivals in Bristol?" NOT "Popular Festivals in Bristol".
+- ONE H2 MUST be a LIST QUESTION (e.g., "What are the most popular X?") — under this H2, list EVERY named entity from the research as individual H3s. Do NOT limit to 4-5; include ALL entities provided in the NAMED ENTITIES section.
+- Other H2s should be practical/informational questions from PAA: "What should you know before...?", "What should you do when...?"
+- H3s under the list H2 = individual named entities (festival names, service names, place names). Under other H2s = sub-questions or subtopics.
+- The LAST H2 should be an FAQ section. Under it, add H4s that are yes/no questions derived from PAA data or natural reader concerns (e.g., "Is Bristol a safe place to attend a food festival with family?").
 
 HEADING RULES (STRICTLY ENFORCED — violations will be rejected):
 - The FIRST heading MUST be level 1 (H1). Exactly 1 H1. This is non-negotiable.
-- H1 text format: "[Main Topic] — [concise representative summary phrase]" or a natural title that captures the page's full scope.
-- Target 15-22 total headings for service/location pages, 20-30 for blog/landing pages. Quality over quantity — each heading must earn its place.
-- 4-8 H2s covering the most important contextual vectors (not every vector needs its own H2)
-- H3s under H2s for subtopics, questions, or list items
-- H4s sparingly for deep detail
+- H1 text format: "[Number] Best [Topic] for [qualifier]" or a natural title that captures the page's full scope with the entity count.
+- Target 20-35 total headings for blog/landing pages, 15-25 for service/location pages. The entity H3s will be a large portion of total headings.
+- 3-5 H2s: at least 2 MUST be question-phrased (from PAA), 1 MUST be a list question, 1 should be an FAQ section
+- H3s under the list H2: include EVERY named entity — do NOT truncate or summarize. If there are 15 entities, there must be 15 H3s.
+- H4s under the FAQ H2: 2-4 yes/no questions that readers would naturally ask. These target featured snippets.
 - Valid nesting only: H1 → H2 → H3 → H4. Never skip levels (no H1 → H3, no H2 → H4).
-- Progressive depth: foundational understanding → advanced depth
+- Progressive depth: foundational understanding → list of entities → FAQ
 - Each heading must satisfy a unique intent layer (no duplicate intent)
 - Headings must flow logically — each leads naturally to the next
-- Include edge cases, negative attributes (e.g., risks, downsides), and decision-making factors where relevant
-- Use question-based headings only where PAA opportunities exist naturally
+- H2s MUST be grounded in PAA questions, competitor headings, or SERP data. Do NOT invent topic-label H2s.
 - Natural, search-friendly text — not keyword-stuffed
 - Cover SERP consensus topics (minimum requirements) AND SERP gaps (differentiation)
 - Address competitor weaknesses with stronger coverage
@@ -1655,6 +1691,9 @@ ${briefExamples ? `Similar Brief Examples:\n${briefExamples}` : ""}`,
   // Retry once if too few headings — GPT-4o sometimes produces sparse output
   if (headings.length < 10) {
     console.warn(`[Step 8] Only ${headings.length} headings — retrying with enforcement prompt...`);
+    const entityListForRetry = namedEntities.length > 0
+      ? "NAMED ENTITIES (each must be an H3):\n" + namedEntities.map((e, i) => (i + 1) + ". " + e).join("\n") + "\n"
+      : "";
     const retryResponse = await getOpenAI().chat.completions.create({
       model: "gpt-4o",
       temperature: 0.4,
@@ -1665,21 +1704,22 @@ ${briefExamples ? `Similar Brief Examples:\n${briefExamples}` : ""}`,
           role: "system",
           content: `You previously generated only ${headings.length} headings for a ${params.pageType} page. This is far too few.
 
-HARD REQUIREMENT: Generate AT LEAST 15 headings (ideally 18-22) with proper H1 → H2 → H3 → H4 nesting.
-- 1 H1 (purpose-summary)
-- 5-7 H2s (major contextual vectors)
-- 6-10 H3s (sub-topics under H2s)
-- 2-4 H4s (deep detail, edge cases)
+HARD REQUIREMENT: Generate AT LEAST 20 headings with proper H1 → H2 → H3 → H4 nesting.
+- 1 H1 (purpose-summary title)
+- 3-5 H2s (QUESTION-PHRASED from PAA data, including 1 list question and 1 FAQ section)
+- 10+ H3s (individual NAMED ENTITIES under the list H2 — include ALL entities, plus sub-questions under other H2s)
+- 2-4 H4s (yes/no FAQ questions under the FAQ H2)
 
 Your previous headings were:
 ${headings.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}
 
+${entityListForRetry}
 Return the COMPLETE expanded heading set as JSON: { "headings": [{ "level": 1|2|3|4, "text": string }] }
-Keep the existing headings but ADD missing depth. Cover: contextual vectors, edge cases, costs, risks, process details, local factors, decision criteria, FAQs.`,
+Keep entity H3s and question H2s. Add: ALL named entities as H3s, question-phrased H2s from PAA, FAQ H4 questions.`,
         },
         {
           role: "user",
-          content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nContextual Vectors: ${contextualVectors.join(", ")}`,
+          content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nContextual Vectors: ${contextualVectors.join(", ")}${paaQuestions ? `\nPeople Also Ask:\n- ${paaQuestions}` : ""}${namedEntities.length > 0 ? `\nNamed Entities (ALL must be H3s):\n${namedEntities.map((e, i) => `${i + 1}. ${e}`).join("\n")}` : ""}`,
         },
       ],
     });
@@ -1752,7 +1792,7 @@ Keep the existing headings but ADD missing depth. Cover: contextual vectors, edg
 
 // --- Step 9: Structure Instructions + Query Mapping (merged) ---
 
-async function stepStructureAndQueryMapping(
+export async function stepStructureAndQueryMapping(
   params: BriefGenParams,
   rawHeadings: Array<{ level: number; text: string }>,
   keywordData: KeywordResearchResult | null,
@@ -1828,11 +1868,32 @@ CRITICAL: structureInstructions must be PRESCRIPTIVE WRITING DIRECTIVES with spe
 
 **purpose-summary** (H1 only):
 "Purpose: Summarize the entire document (contextual vectors) in a representative manner using the same order.
-Instructions: implicit definition of [TOPIC] in a (representative way)
-+ [vector 1 — use actual contextual vectors provided]
-+ [vector 2 — specific content from competitor research]
-+ [vector 3 — etc.]
-This is the summary of whole [PAGE_TYPE] page${params.clientName ? ` of \\"${params.clientName}\\"` : ""} so try use paragraph format"
+Instructions: Implicit definition of: [TOPIC] + [TOPIC] purpose .....(representative way).
++ [Name of the list H2 — e.g., 'Best Festivals in Bristol']
+1. [First entity H3 name] (30 to 50 words)
+2. [Second entity H3 name] (30 to 50 words)
+3. [Third entity H3 name] (30 to 50 words)
+4. [Fourth entity H3 name] (30 to 50 words)
+5. [Fifth entity H3 name] (30 to 50 words)
+Just process these 5 (five) without depth detailed explanation,
++ [Question H2 text — e.g., 'What should you know before attending...?']
++ [Question H2 text — repeat for each question H2]
+
+All information for H1 should be processed in a representative way using paragraph format but if somewhere you feel like a short list is needed, then go ahead but use paragraph format; this is just a summary of the entire document, so do not dive deep into any of the above-mentioned headings; we just need an overview for every section.
+Keep in mind every paragraph, sentence, phrase, or word should be connected to its next part in a logical way while containing natural flow between wording. Less words more quality is our main aim. Use Micro semantic and implement Term frequency and inverse document frequency to optimize H1 as much as we can."
+
+CRITICAL FOR PURPOSE-SUMMARY: The numbered items (1-5) MUST be the FIRST 5 H3 headings under the list H2 — these are named entities like "Bristol International Balloon Fiesta", "Bristol Pride", "Upfest" etc. They are NOT H2 section titles. Look at the H3 children of the list-question H2 (the one starting with "What are the most popular...") and use those names.
+Example of CORRECT H1 structure:
+"+ Best Festivals in Bristol
+1. Bristol International Balloon Fiesta (30 to 50 words)
+2. Bristol Pride (30 to 50 words)
+3. Upfest (30 to 50 words)
+4. Bristol Harbour Festival (30 to 50 words)
+5. Love Saves The Day (30 to 50 words)
+Just process these 5 (five) without depth detailed explanation,
++ What should you know before attending a festival in Bristol?
++ What should you do when attending a festival in Bristol for the first time?"
+${params.clientName ? `Reference the client: "${params.clientName}"` : ""}
 
 **explicit-definition** (H2/H3):
 "Explicit Definition: What is [HEADING TOPIC]? Use signifier, qualifier, and enriching context terms.
@@ -1844,14 +1905,40 @@ The answer should be context-rich, accurate and clear.
 Answer should be accurate, clear and context-rich. Under [40] words or [220] characters.
 [Include specific facts/entities from competitor research that MUST appear]"
 
-**list-definition** (H2/H3):
-"List Definition:
-List Intro: [contextual opening sentence using topic terms]...
-[Item 1 — specific item derived from competitor/SERP research]
-[Item 2 — specific item]
-[Item 3 — etc.]
-List Outro: summary or whole answer justification.
-DO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE"
+**list-definition** (H2/H3 — when the H2 is a list question like "What are the most popular X?"):
+"List + List Definition
+List Intro......... start answer with repeating at least five words from question ............. these [N] are most popular [entities] in [location]...............
+list + List Description=> Each description write around 30 to 40 words for detail explanation we will process each [entity type] separately after this section..
+
++ [First child H3 name]
++ [Second child H3 name]
++ [Third child H3 name]
+[... enumerate ALL child H3 names from the heading hierarchy ...]
+
+Short outro and introduce detailed description for each [entity type] below...."
+
+IMPORTANT FOR LIST-DEFINITION: Look at the heading hierarchy and list ALL H3 children of this H2 as "+" items. If there are 15 H3s, list all 15. Include word count targets (30-40 words per item) and transition to detailed sections below.
+
+**entity-template** (H3 named entities — festivals, services, places, products that are children of a list H2):
+"[Entity Name]
+1. Introduction
+2. Key Features
+3. Audience
+4. Dates, Location & Ticket Information
+5. History
+6. Things to Do
+7. Why You Should Attend
+8. Tips for Attendees
+9. Accessibility
+10. Reviews or Testimonials
+11. Conclusion
+
+Following Template Write in a Paragraph Format"
+
+IMPORTANT FOR ENTITY-TEMPLATE: Any H3 that is a NAMED ENTITY (a child of a list-definition H2) gets this full template — NOT explicit-definition. Adapt the sub-section names to fit the entity type:
+- Festivals: Introduction, Key Features, Audience, Dates/Location/Tickets, History, Things to Do, Why Attend, Tips, Accessibility, Reviews, Conclusion
+- Services: Introduction, What It Includes, Who It's For, Pricing, Process, Benefits, Considerations, How to Book
+- Places: Introduction, Location, Key Attractions, Best Time to Visit, Getting There, Tips, Reviews
 
 **reasoning-based** (H2/H3):
 "Start answering: [restate the heading question]... then explain exact process based on available information.
@@ -1886,14 +1973,26 @@ Include: [specific evidence items from competitor research]"
 STRUCTURE PATTERN TAXONOMY (assign one per heading):
 ${Object.values(STRUCTURE_PATTERNS).map((p) => `- "${p.id}": ${p.description} [${p.wordCountRange[0]}-${p.wordCountRange[1]} words]`).join("\n")}
 
+PATTERN ASSIGNMENT RULES (follow strictly):
 For H1: ALWAYS assign "purpose-summary" pattern.
-For H2/H3 definitions: use "explicit-definition".
-For H2/H3 with lists: use "list-definition".
-For yes/no or direct questions: use "direct-answer".
-For numeric/data answers: use "exact-answer".
+For H2 that is a list question ("What are the most popular X?"): use "list-definition".
+For H2/H4 that is a yes/no question ("Is X...?", "Can you...?", "Does X...?"): use "direct-answer" with "Direct Answer: Yes/No... under 40 words or 220 characters".
+For H2 that is a "what should you" / "what do you need" / "how do you" question: use "exact-answer" with concise response instructions.
+For H2 starting with "What are the" + plural noun: use "list-definition" (NOT exact-answer).
+For H3 named entities that are children of a list-definition H2: use "entity-template" pattern with the full numbered template (Introduction, Key Features, etc.) — NOT "explicit-definition".
+For H2/H3 definitions (non-entity): use "explicit-definition".
 For why/how explanations: use "reasoning-based".
 For recommendations: use "suggestive-answer".
 For comparison tables: use "table-format" or "comparison".
+
+INTENT RULES (follow strictly):
+- Intent must describe the READER'S PURPOSE — what decision or understanding the section gives the reader.
+- NEVER start intent with "Define", "Provide", or "Explain".
+- CORRECT: "Help the reader decide which festivals to attend based on their interests"
+- CORRECT: "Give the reader a quick overview of all festivals so they can decide which to explore"
+- CORRECT: "Answer practical questions a first-time festival-goer in Bristol would have"
+- INCORRECT: "Define and describe Bristol International Balloon Fiesta"
+- INCORRECT: "Provide a list of festivals"
 
 For each heading provide:
 1. structurePattern: Pattern ID from taxonomy above (REQUIRED)
@@ -1902,10 +2001,16 @@ For each heading provide:
 4. intent: One sentence on what this section accomplishes
 5. wordCountTarget: From the pattern's word count range
 6. targetQueries: Keywords mapped to this heading by semantic relevance (0-5 per heading)
-7. serpFeatures: SERP features this heading targets (FS, PAA, KP, LC)
+7. serpFeatures: SERP features this heading targets (use ABBREVIATIONS ONLY: "FS", "PAA", "KP", "LC" — never spell out "Featured Snippet")
 8. contentDesignPattern: "paragraph"|"table"|"comparison"|"list"|"visual"
 9. snippetTarget: boolean
 10. paaTarget: boolean
+11. contextualRationale: Object with 5 reasoning fields explaining WHY this heading exists (REQUIRED):
+    - levelJustification: Why this heading is at this level (H1/H2/H3/H4) and not another. Reference the parent heading if applicable.
+    - patternRationale: Why this structure pattern was chosen over alternatives. Reference the Sardar pattern rules and SERP evidence.
+    - readerIntent: What the reader is trying to accomplish when they reach this section. Describe their journey and decision point.
+    - evidenceBasis: The SERP data, competitor signals, keyword volumes, and PAA data that drove this heading's inclusion and format.
+    - hierarchyRole: How this heading connects to its parent, children, and siblings in the document tree. Specify parent heading text, number of children, and position in the sequence.
 
 PAGE-TYPE RULES (enforce for ${params.pageType} pages):
 ${getRulesForPageType((params.pageType || "blog") as PageType).slice(0, 2000)}
@@ -1947,7 +2052,14 @@ Return JSON:
     "ruleCodes": string[], "intent": string, "wordCountTarget": number,
     "targetQueries": [{ "query": string, "volume": number, "intent": string }],
     "serpFeatures": string[],
-    "contentDesignPattern": string, "snippetTarget": boolean, "paaTarget": boolean
+    "contentDesignPattern": string, "snippetTarget": boolean, "paaTarget": boolean,
+    "contextualRationale": {
+      "levelJustification": string,
+      "patternRationale": string,
+      "readerIntent": string,
+      "evidenceBasis": string,
+      "hierarchyRole": string
+    }
   }]
 }`,
       },
@@ -1973,6 +2085,13 @@ Return JSON:
               contentDesignPattern: "paragraph",
               snippetTarget: true,
               paaTarget: false,
+              contextualRationale: {
+                levelJustification: "H1 is the single page-level title establishing the full topical scope — 'Expert House Moving' signals authority, 'Bristol' anchors locality, 'Mo Transport' brands the service. Exactly one H1 per page.",
+                patternRationale: "purpose-summary is mandatory for H1 in Sardar methodology. This pattern represents all contextual vectors in heading order as an overview paragraph, previewing every major section without diving deep into any one.",
+                readerIntent: "A user landing from 'home removals' (600/mo) wants to immediately understand what services Mo Transport offers and whether this page answers their specific moving question. The summary acts as a decision point — continue or bounce.",
+                evidenceBasis: "Primary keyword 'home removals' (600/mo, commercial). 'house removal companies' (450/mo). TF-IDF shows 'removal', 'Bristol', 'home', 'moving' are highest-weighted terms across the SERP. Featured Snippet opportunity for the primary query.",
+                hierarchyRole: "Root node of the document. No parent. Previews each H2 section as a '+' line item: definition, checklist, steps. Creates table-of-contents effect establishing the reading path.",
+              },
             },
             {
               level: 2,
@@ -1987,6 +2106,13 @@ Return JSON:
               contentDesignPattern: "paragraph",
               snippetTarget: true,
               paaTarget: true,
+              contextualRationale: {
+                levelJustification: "H2 because this is a standalone definitional section addressing a distinct user intent. It sits directly under H1 and requires its own visibility in the document outline for snippet eligibility.",
+                patternRationale: "explicit-definition chosen because the heading asks 'What is...?' — a definitional question. Sardar rules map definitional non-entity headings to explicit-definition with signifier-qualifier format. Not list-definition because it asks for a definition, not an enumerated list.",
+                readerIntent: "A reader searching 'house removal companies' (450/mo) may not distinguish moving from removal. This section clarifies terminology so they can confidently proceed knowing they're on the right page.",
+                evidenceBasis: "PAA: 'What is a home moving?' appears in People Also Ask. Mapped keyword 'house removal companies' (450/mo). Competitors define this term in their opening sections. Featured Snippet opportunity for the definition query.",
+                hierarchyRole: "First H2 child of the H1. No H3 children — leaf section. Connects upward to H1 summary and laterally to sibling H2s (checklist, steps). Sets foundational terminology before the practical sections.",
+              },
             },
             {
               level: 2,
@@ -2001,6 +2127,13 @@ Return JSON:
               contentDesignPattern: "list",
               snippetTarget: true,
               paaTarget: false,
+              contextualRationale: {
+                levelJustification: "H2 because this is a major practical section with a distinct user intent (preparation checklist). It needs H2 visibility for document outline and snippet eligibility. Not H3 because it's not subordinate to another content section.",
+                patternRationale: "list-definition chosen because the heading is a 'What to know...' question that expects an enumerated checklist. SERP consensus shows competitors present this as bulleted items. The list format targets the Featured Snippet opportunity for checklist-style queries.",
+                readerIntent: "A reader planning a move in Bristol wants a scannable checklist of considerations — cost of living, council tax, transport — before committing. The list format lets them quickly assess what applies to their situation.",
+                evidenceBasis: "Keyword 'home removals' (600/mo) contextually relevant. Competitor content covers these checklist items. Featured Snippet opportunity — current SERP shows list-format snippets for 'what to know before moving' queries.",
+                hierarchyRole: "Second H2 child of H1. No H3 children — leaf section. Sits between the definitional H2 and the process-steps H2. Connects upward to H1 summary where it appears as a '+' line item.",
+              },
             },
             {
               level: 2,
@@ -2015,6 +2148,13 @@ Return JSON:
               contentDesignPattern: "paragraph",
               snippetTarget: true,
               paaTarget: false,
+              contextualRationale: {
+                levelJustification: "H2 because this is a standalone process section covering the step-by-step moving procedure. It addresses a distinct intent (actionable steps) that doesn't belong under any other H2. H2 visibility ensures it appears in the document outline.",
+                patternRationale: "reasoning-based chosen because the heading asks 'What are the steps...?' — a process/how-to question requiring sequential explanation. Sardar rules use reasoning-based for how/why process questions. Written in paragraph format with embedded steps rather than a bare list, because 'more text doesn't mean more context'.",
+                readerIntent: "A reader ready to move wants a clear sequence of actions: change address, transfer utilities, declutter, pack essentials. They need confidence they haven't forgotten a critical step. The paragraph format with numbered items provides both structure and reassurance.",
+                evidenceBasis: "Keyword 'house removal companies' (450/mo) contextually relevant. Competitor content consistently covers 5-8 moving steps. Featured Snippet opportunity for step-by-step queries in this niche.",
+                hierarchyRole: "Third and final H2 child of H1. No H3 children — leaf section. Sits after the checklist H2, completing a natural progression: define → prepare → execute. Referenced in H1 summary as a '+' line item.",
+              },
             },
           ],
         }),
@@ -2028,25 +2168,95 @@ Return JSON:
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  const parsed = safeParseJSON(content) as {
-    headings?: Array<{
-      level: number;
-      text: string;
-      structureInstructions: string;
-      ruleCodes: string[];
-      intent: string;
-      wordCountTarget: number;
-      targetQueries: QueryEntry[];
-      serpFeatures: string[];
-      contentDesignPattern: string;
-      snippetTarget: boolean;
-      paaTarget: boolean;
-    }>;
+  type Step9Heading = {
+    level: number;
+    text: string;
+    structureInstructions: string;
+    ruleCodes: string[];
+    intent: string;
+    wordCountTarget: number;
+    targetQueries: QueryEntry[];
+    serpFeatures: string[];
+    contentDesignPattern: string;
+    snippetTarget: boolean;
+    paaTarget: boolean;
+    contextualRationale?: {
+      levelJustification: string;
+      patternRationale: string;
+      readerIntent: string;
+      evidenceBasis: string;
+      hierarchyRole: string;
+    };
   };
+  const parsed = safeParseJSON(content) as { headings?: Step9Heading[] };
+  let allAnnotated = parsed.headings || [];
+
+  // Continuation: if GPT-4o truncated (fewer headings than input), process remaining in follow-up calls
+  if (allAnnotated.length < rawHeadings.length) {
+    const processedTexts = new Set(allAnnotated.map((h) => h.text));
+    const remaining = rawHeadings.filter((h) => !processedTexts.has(h.text));
+    console.log(`[Step 9] Only ${allAnnotated.length}/${rawHeadings.length} headings annotated — continuing with ${remaining.length} remaining`);
+
+    // Process remaining in chunks of 10
+    for (let ci = 0; ci < remaining.length; ci += 10) {
+      const chunk = remaining.slice(ci, ci + 10);
+      const contResponse = await getOpenAI().chat.completions.create({
+        model: "gpt-4o",
+        temperature: 0.3,
+        max_tokens: 16384,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You are executing Step 9 of the Sardar brief methodology: Structure Instructions + Query Mapping.
+
+Continue annotating headings. Apply the SAME rules as the initial batch:
+- H3 named entities (children of a list H2) get entity-template: numbered template (1. Introduction, 2. Key Features, 3. Audience, 4. Dates/Location/Tickets, 5. History, 6. Things to Do, 7. Why Attend, 8. Tips, 9. Accessibility, 10. Reviews, 11. Conclusion) + "Following Template Write in a Paragraph Format"
+- H2 questions get list-definition or direct-answer
+- H4 yes/no questions get direct-answer: "Direct Answer: Yes/No... under 40 words or 220 characters"
+- Intent must describe READER PURPOSE, never "Define" or "Provide"
+
+- EVERY heading MUST include contextualRationale with all 5 fields: levelJustification, patternRationale, readerIntent, evidenceBasis, hierarchyRole
+
+Return JSON: { "headings": [{ level, text, structureInstructions, ruleCodes, intent, wordCountTarget, targetQueries: [{query, volume, intent}], serpFeatures, contentDesignPattern, snippetTarget, paaTarget, contextualRationale: { levelJustification, patternRationale, readerIntent, evidenceBasis, hierarchyRole } }] }`,
+          },
+          {
+            role: "user",
+            content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\n\nHeadings to annotate:\n${chunk.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\n${keywordList ? `Keywords to map:\n${keywordList}\n` : ""}${competitorItemsContext ? `\nCOMPETITOR CONTENT ITEMS:\n${competitorItemsContext}\n` : ""}`,
+          },
+        ],
+      });
+      const contContent = contResponse.choices[0]?.message?.content || "{}";
+      const contParsed = safeParseJSON(contContent) as { headings?: Step9Heading[] };
+      if (contParsed.headings?.length) {
+        allAnnotated = [...allAnnotated, ...contParsed.headings];
+        console.log(`[Step 9] Continuation chunk added ${contParsed.headings.length} headings (total: ${allAnnotated.length})`);
+      }
+    }
+  }
+
+  // Normalize spelled-out SERP features to abbreviations
+  const serpFeatureAbbreviations: Record<string, string> = {
+    "Featured Snippet": "FS",
+    "featured snippet": "FS",
+    "People Also Ask": "PAA",
+    "people also ask": "PAA",
+    "Knowledge Panel": "KP",
+    "knowledge panel": "KP",
+    "Local Carousel": "LC",
+    "local carousel": "LC",
+  };
+  for (const h of allAnnotated) {
+    const raw = h as Record<string, unknown>;
+    const sf = (raw.serpFeatures as string[]) || [];
+    raw.serpFeatures = sf.map((f) => serpFeatureAbbreviations[f] || f);
+    const rc = (raw.ruleCodes as string[]) || [];
+    raw.ruleCodes = rc.map((r) => serpFeatureAbbreviations[r] || r);
+  }
 
   // Build a pool of unused keywords for backfill
   const usedQueries = new Set<string>();
-  const parsedHeadings = parsed.headings || rawHeadings;
+  const parsedHeadings = allAnnotated.length > 0 ? allAnnotated : rawHeadings;
   for (const h of parsedHeadings) {
     const raw = h as Record<string, unknown>;
     const tq = (raw.targetQueries as QueryEntry[]) || [];
@@ -2089,6 +2299,7 @@ Return JSON:
       contentDesignPattern: (raw.contentDesignPattern as string) || structurePattern,
       snippetTarget: raw.snippetTarget as boolean | undefined,
       paaTarget: raw.paaTarget as boolean | undefined,
+      contextualRationale: raw.contextualRationale as EnhancedHeading["contextualRationale"],
     };
   });
 }
