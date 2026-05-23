@@ -72,6 +72,48 @@ function safeParseJSON<T>(text: string): T {
     // ignore
   }
 
+  // Repair unescaped double quotes inside JSON string values.
+  // GPT-4o sometimes produces: "field": "text with "inner quotes" here"
+  // Strategy: walk char-by-char tracking JSON structure; when inside a string
+  // value, detect unescaped quotes that don't end the string (followed by
+  // content that isn't a valid JSON separator like , : } ]).
+  try {
+    let repaired = "";
+    let i = 0;
+    let inStr = false;
+    let esc = false;
+    while (i < cleaned.length) {
+      const ch = cleaned[i];
+      if (esc) { repaired += ch; esc = false; i++; continue; }
+      if (ch === "\\") { repaired += ch; esc = true; i++; continue; }
+      if (ch === '"') {
+        if (!inStr) {
+          inStr = true;
+          repaired += ch;
+        } else {
+          // Check if this quote actually ends the string:
+          // Look ahead past whitespace — if next meaningful char is , : } ] then it's a real closer
+          let ahead = i + 1;
+          while (ahead < cleaned.length && (cleaned[ahead] === " " || cleaned[ahead] === "\t")) ahead++;
+          const next = cleaned[ahead];
+          if (next === undefined || next === "," || next === ":" || next === "}" || next === "]" || next === "\n" || next === "\r") {
+            inStr = false;
+            repaired += ch;
+          } else {
+            // Unescaped quote inside string — escape it
+            repaired += '\\"';
+          }
+        }
+      } else {
+        repaired += ch;
+      }
+      i++;
+    }
+    return JSON.parse(repaired) as T;
+  } catch {
+    // ignore, continue with stack-based repair
+  }
+
   // Stack-based repair for truncated JSON.
   // Track nesting ORDER so closers are emitted in correct sequence.
   const stack: Array<"{" | "["> = [];
@@ -2188,7 +2230,22 @@ Return JSON:
       hierarchyRole: string;
     };
   };
-  const parsed = safeParseJSON(content) as { headings?: Step9Heading[] };
+  let parsed: { headings?: Step9Heading[] };
+  try {
+    parsed = safeParseJSON(content) as { headings?: Step9Heading[] };
+  } catch {
+    // Fallback: strip contextualRationale objects (most likely source of unescaped quotes)
+    // then re-parse. Headings will work without rationale — the UI handles missing rationale gracefully.
+    console.warn("[Step 9] JSON parse failed — retrying without contextualRationale");
+    const stripped = content.replace(/"contextualRationale"\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}\s*,?/g, "");
+    try {
+      parsed = safeParseJSON(stripped) as { headings?: Step9Heading[] };
+    } catch {
+      // Last resort: return empty — the pipeline will use rawHeadings as fallback
+      console.error("[Step 9] JSON parse failed even after stripping contextualRationale");
+      parsed = { headings: [] };
+    }
+  }
   let allAnnotated = parsed.headings || [];
 
   // Continuation: if GPT-4o truncated (fewer headings than input), process remaining in follow-up calls
@@ -2227,7 +2284,18 @@ Return JSON: { "headings": [{ level, text, structureInstructions, ruleCodes, int
         ],
       });
       const contContent = contResponse.choices[0]?.message?.content || "{}";
-      const contParsed = safeParseJSON(contContent) as { headings?: Step9Heading[] };
+      let contParsed: { headings?: Step9Heading[] };
+      try {
+        contParsed = safeParseJSON(contContent) as { headings?: Step9Heading[] };
+      } catch {
+        console.warn("[Step 9] Continuation JSON parse failed — retrying without contextualRationale");
+        const stripped = contContent.replace(/"contextualRationale"\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}\s*,?/g, "");
+        try {
+          contParsed = safeParseJSON(stripped) as { headings?: Step9Heading[] };
+        } catch {
+          contParsed = { headings: [] };
+        }
+      }
       if (contParsed.headings?.length) {
         allAnnotated = [...allAnnotated, ...contParsed.headings];
         console.log(`[Step 9] Continuation chunk added ${contParsed.headings.length} headings (total: ${allAnnotated.length})`);
