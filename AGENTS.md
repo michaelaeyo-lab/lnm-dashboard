@@ -6,7 +6,32 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # LNM Dashboard — Project Context
 
-## Recent Changes (2026-05-23)
+## Recent Changes (2026-05-25)
+
+### 1. SSE Stream JSON Parse Fix (commit dbbccfb)
+- Fixed "Unterminated string in JSON at position 12909" error on brief generation
+- Root cause: `TextDecoder.decode()` splits data at arbitrary byte boundaries, not JSON boundaries
+- Fix: Added line buffering (`sseBuffer`) across chunks — only complete lines are parsed
+- Applied to 5 files: `app/api/briefs/route.ts`, `app/api/content/generate/route.ts`, `app/api/content/refine/route.ts`, `app/components/BriefGenerator.tsx`, `app/components/ContentWriter.tsx`
+
+### 2. Programmatic Structure Instructions Builder (commit b73a373) — IN PROGRESS / NEEDS FIX
+- **Goal:** Replace LLM-generated structureInstructions with deterministic code-built instructions following gold-standard CSV templates
+- **What was done:**
+  - Added `entity-template` to `StructurePatternId` type and `STRUCTURE_PATTERNS` in `structure-patterns.ts`
+  - Added `HeadingNode` type + `buildHeadingTree()` — flat heading array → parent-child tree
+  - Added 9 regex classifiers: `isYesNoQuestion`, `isListQuestion`, `isDefinitionQuestion`, `isCostQuestion`, `isProcessQuestion`, `isSuggestiveQuestion`, `isComparisonQuestion`, `isChecklistQuestion`, `isNamedEntity`
+  - Added `classifyHeadingPattern()` — deterministic heuristic engine for pattern assignment
+  - Added `ENTITY_TEMPLATES` — niche-specific sub-section templates (festival, neighborhood, service, place, etc.)
+  - Added 11 `build*Instruction()` template functions (one per pattern type)
+  - Added `assignPatternsAndInstructions()` orchestrator in `structure-patterns.ts`
+  - Replaced Step 9 in `brief-pipeline.ts`: programmatic phase runs first, LLM only handles query mapping/intent/contextualRationale
+- **KNOWN BUG:** After testing, structure instructions are STILL showing weak generic text ("Establish the main topic of the page"). The programmatic builder code exists but is NOT producing the expected output in the dashboard. Root cause investigation needed — possible issues:
+  1. The programmatic builder runs but its output is being overwritten somewhere downstream
+  2. The UI component displaying instructions may be reading from a different field
+  3. The old brief data is cached in the DB and showing stale results (need to generate a NEW brief)
+  4. The `assignPatternsAndInstructions()` function may not be getting called correctly at runtime
+
+### Previous Changes (2026-05-23)
 
 ### 1. Step 9 contextualRationale — FULLY WIRED
 - `contextualRationale` now flows end-to-end: system prompt → Return JSON schema → few-shot example → continuation prompt → `Step9Heading` type → post-processing return
@@ -56,11 +81,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Post-step grounding check: warns when H2s aren't grounded in research
 
 ## Key Files
-- `app/lib/brief-pipeline.ts` — 12-step brief generation pipeline (core)
+- `app/lib/brief-pipeline.ts` — 12-step brief generation pipeline (core). Step 9 at ~line 1837.
 - `app/lib/types.ts` — All TypeScript types (EnhancedHeading, EnhancedBrief, etc.)
 - `app/lib/lnm-serpdata-agent.ts` — SERP data (SerpAPI + Firecrawl + SearchAtlas)
 - `app/lib/csv-validation.ts` — CSV format validation + `briefToCsvString()` export
-- `app/lib/writing-rules/structure-patterns.ts` — Structure pattern taxonomy
+- `app/lib/writing-rules/structure-patterns.ts` — Structure pattern taxonomy + programmatic instruction builder (NEW: `assignPatternsAndInstructions()`, `buildHeadingTree()`, `classifyHeadingPattern()`, all `build*Instruction()` functions)
 - `app/components/BriefEditor.tsx` — Brief editor UI with tabs (Outline, Hierarchy, Analysis, etc.)
 - `app/components/brief/ContextualHierarchyPanel.tsx` — Contextual hierarchy rationale panel
 - `scripts/test-festival-brief.ts` — Full pipeline test for festival in Bristol
