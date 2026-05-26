@@ -11,7 +11,7 @@ import {
 } from "./retrieval";
 import type { RetrievedChunk } from "./retrieval";
 import { getCoreRules, getRulesForPageType, type PageType } from "./writing-rules/core";
-import { STRUCTURE_PATTERNS, type StructurePatternId } from "./writing-rules/structure-patterns";
+import { STRUCTURE_PATTERNS, type StructurePatternId, assignPatternsAndInstructions, type InstructionContext } from "./writing-rules/structure-patterns";
 import {
   lookupKeyword,
   searchAtlasAvailable,
@@ -870,7 +870,8 @@ export async function generateBrief(
           params,
           rawHeadings,
           keywordData,
-          deepCompetitors
+          deepCompetitors,
+          contextualVectors
         );
         validateStepOutput(9, { headings });
         sendEvent({ step: 9, label: "Structure complete", progress: 0.78 });
@@ -1833,26 +1834,36 @@ Keep entity H3s and question H2s. Add: ALL named entities as H3s, question-phras
 }
 
 // --- Step 9: Structure Instructions + Query Mapping (merged) ---
+// Pattern assignment + structure instructions are now PROGRAMMATIC.
+// The LLM only handles query mapping, intent, and contextualRationale.
 
 export async function stepStructureAndQueryMapping(
   params: BriefGenParams,
   rawHeadings: Array<{ level: number; text: string }>,
   keywordData: KeywordResearchResult | null,
-  deepCompetitors: DeepCompetitorAnalysisResult
+  deepCompetitors: DeepCompetitorAnalysisResult,
+  contextualVectors: string[] = []
 ): Promise<EnhancedHeading[]> {
-  // RAG: get rule examples
-  const ruleExamples = await retrieveRuleExamples(
-    ["FS", "PAA", "NER", "TF-IDF"],
-    5
-  );
+  // ── PHASE A: Programmatic pattern assignment + instruction generation ──
+  // Deterministic — no LLM involved. Produces identical output for identical input.
+  const instructionCtx: InstructionContext = {
+    topic: params.topic,
+    pageType: params.pageType || "blog",
+    niche: params.niche || "",
+    location: params.location || undefined,
+    clientName: params.clientName || undefined,
+    contextualVectors,
+    crossCompetitorEntities: deepCompetitors.crossCompetitorEntities || [],
+    competitorStrengths: deepCompetitors.competitors.flatMap((c) => c.strengths || []),
+    paaQuestions: keywordData?.paa || [],
+    relatedKeywords: (keywordData?.related || []).map((k) => k.keyword),
+    gapKeywords: deepCompetitors.gapKeywords || [],
+  };
 
-  const ruleContext = ruleExamples
-    .map((c) => `[Rule Example] ${c.title}: ${c.content.slice(0, 300)}`)
-    .join("\n\n");
+  const programmaticHeadings = assignPatternsAndInstructions(rawHeadings, instructionCtx);
+  console.log(`[Step 9] Programmatic: ${programmaticHeadings.length} headings classified and instruction-built`);
 
-  const coreRules = getCoreRules();
-
-  // Build keyword list for query mapping
+  // ── PHASE B: LLM annotation (query mapping, intent, contextualRationale only) ──
   const allKeywords = keywordData
     ? [keywordData.primary, ...keywordData.related].filter((k) => k.volume > 0)
     : [];
@@ -1862,366 +1873,51 @@ export async function stepStructureAndQueryMapping(
     .map((k) => `${k.keyword} (${k.volume}/mo${k.intent ? `, ${k.intent}` : ""})`)
     .join("\n");
 
-  // Extract competitor design patterns for reference
-  const designPatterns = deepCompetitors.competitors
-    .filter((c) => c.contentDesignPatterns.length > 0)
-    .map((c) => `${c.title}: ${c.contentDesignPatterns.join(", ")}`)
+  const headingListForLLM = programmaticHeadings
+    .map((h, i) => `[${i}] ${"#".repeat(h.level)} ${h.text} (pattern: ${h.structurePattern})`)
     .join("\n");
-
-  // Extract specific competitor content items for Sardar-style instructions
-  const competitorContentItems: string[] = [];
-  for (const comp of deepCompetitors.competitors) {
-    if (comp.strengths.length > 0) {
-      competitorContentItems.push(...comp.strengths.map((s) => `[${comp.title}] ${s}`));
-    }
-  }
-  if (deepCompetitors.gapKeywords?.length) {
-    competitorContentItems.push(...deepCompetitors.gapKeywords.map((k) => `Gap opportunity: ${k}`));
-  }
-  const competitorItemsContext = competitorContentItems.slice(0, 30).join("\n");
-
-  // Extract specific heading topics competitors cover (for grounding instructions)
-  const competitorHeadingTopics = (keywordData?.competitors || [])
-    .flatMap((c) => c.headings)
-    .filter(Boolean)
-    .slice(0, 40)
-    .join("\n");
-
-  const methodologyCtx9 = await getStepMethodologyContext(9, params.topic);
 
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     temperature: 0.3,
-    max_tokens: 16384,
+    max_tokens: 8192,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
-        content: `You are executing Step 9 of the Sardar brief methodology: Structure Instructions + Query Mapping.
+        content: `You are executing Step 9B: Query Mapping + Semantic Annotation.
+Structure patterns and instructions are ALREADY assigned programmatically. Your ONLY job is to provide semantic annotations.
 
-${methodologyCtx9}
+For each heading (identified by index), provide:
+1. targetQueries: 0-5 keywords from the list, mapped by semantic relevance to this heading
+2. intent: One sentence describing the READER'S PURPOSE (never start with "Define", "Provide", or "Explain")
+3. serpFeatures: SERP features this heading targets (abbreviations ONLY: "FS", "PAA", "KP", "LC")
+4. ruleCodes: Writing rule codes ("FS", "PAA", "NER", "TF-IDF", "CO-OCC", "PERSPECTIVE")
+5. contextualRationale: { levelJustification, patternRationale, readerIntent, evidenceBasis, hierarchyRole }
 
-## TASK
-For each heading, assign a structure pattern AND write Sardar-style structure instructions AND map keywords.
+HARD RULES:
+- EVERY H1/H2 MUST have at least 1 targetQuery. Non-negotiable.
+- Distribute ALL provided keywords — every keyword in at least one heading.
+- If more headings than keywords, derive natural queries from heading text.
+- Intent describes reader decision/understanding, not writer action.
 
-CRITICAL: structureInstructions must be PRESCRIPTIVE WRITING DIRECTIVES with specific content items from the competitor research — NOT generic pattern labels or descriptions.
-
-### SARDAR-STYLE INSTRUCTION TEMPLATES (follow these formats EXACTLY):
-
-**purpose-summary** (H1 only):
-"Purpose: Summarize the entire document (contextual vectors) in a representative manner using the same order.
-Instructions: Implicit definition of: [TOPIC] + [TOPIC] purpose .....(representative way).
-+ [Name of the list H2 — e.g., 'Best Festivals in Bristol']
-1. [First entity H3 name] (30 to 50 words)
-2. [Second entity H3 name] (30 to 50 words)
-3. [Third entity H3 name] (30 to 50 words)
-4. [Fourth entity H3 name] (30 to 50 words)
-5. [Fifth entity H3 name] (30 to 50 words)
-Just process these 5 (five) without depth detailed explanation,
-+ [Question H2 text — e.g., 'What should you know before attending...?']
-+ [Question H2 text — repeat for each question H2]
-
-All information for H1 should be processed in a representative way using paragraph format but if somewhere you feel like a short list is needed, then go ahead but use paragraph format; this is just a summary of the entire document, so do not dive deep into any of the above-mentioned headings; we just need an overview for every section.
-Keep in mind every paragraph, sentence, phrase, or word should be connected to its next part in a logical way while containing natural flow between wording. Less words more quality is our main aim. Use Micro semantic and implement Term frequency and inverse document frequency to optimize H1 as much as we can."
-
-CRITICAL FOR PURPOSE-SUMMARY: The numbered items (1-5) MUST be the FIRST 5 H3 headings under the list H2 — these are named entities like "Bristol International Balloon Fiesta", "Bristol Pride", "Upfest" etc. They are NOT H2 section titles. Look at the H3 children of the list-question H2 (the one starting with "What are the most popular...") and use those names.
-Example of CORRECT H1 structure:
-"+ Best Festivals in Bristol
-1. Bristol International Balloon Fiesta (30 to 50 words)
-2. Bristol Pride (30 to 50 words)
-3. Upfest (30 to 50 words)
-4. Bristol Harbour Festival (30 to 50 words)
-5. Love Saves The Day (30 to 50 words)
-Just process these 5 (five) without depth detailed explanation,
-+ What should you know before attending a festival in Bristol?
-+ What should you do when attending a festival in Bristol for the first time?"
-${params.clientName ? `Reference the client: "${params.clientName}"` : ""}
-
-**explicit-definition** (H2/H3):
-"Explicit Definition: What is [HEADING TOPIC]? Use signifier, qualifier, and enriching context terms.
-The answer should be context-rich, accurate and clear.
-[Optional sub-question: Is X the same as Y? Direct Answer: Yes or No]"
-
-**direct-answer** (H2/H3/H4):
-"Direct Answer: [Yes/No] [restate topic]... then reason or justification.
-Answer should be accurate, clear and context-rich. Under [40] words or [220] characters.
-[Include specific facts/entities from competitor research that MUST appear]"
-
-**list-definition** (H2/H3 — when the H2 is a list question like "What are the most popular X?"):
-"List + List Definition
-List Intro......... start answer with repeating at least five words from question ............. these [N] are most popular [entities] in [location]...............
-list + List Description=> Each description write around 30 to 40 words for detail explanation we will process each [entity type] separately after this section..
-
-+ [First child H3 name]
-+ [Second child H3 name]
-+ [Third child H3 name]
-[... enumerate ALL child H3 names from the heading hierarchy ...]
-
-Short outro and introduce detailed description for each [entity type] below...."
-
-IMPORTANT FOR LIST-DEFINITION: Look at the heading hierarchy and list ALL H3 children of this H2 as "+" items. If there are 15 H3s, list all 15. Include word count targets (30-40 words per item) and transition to detailed sections below.
-
-**entity-template** (H3 named entities — festivals, services, places, products that are children of a list H2):
-"[Entity Name]
-1. Introduction
-2. Key Features
-3. Audience
-4. Dates, Location & Ticket Information
-5. History
-6. Things to Do
-7. Why You Should Attend
-8. Tips for Attendees
-9. Accessibility
-10. Reviews or Testimonials
-11. Conclusion
-
-Following Template Write in a Paragraph Format"
-
-IMPORTANT FOR ENTITY-TEMPLATE: Any H3 that is a NAMED ENTITY (a child of a list-definition H2) gets this full template — NOT explicit-definition. Adapt the sub-section names to fit the entity type:
-- Festivals: Introduction, Key Features, Audience, Dates/Location/Tickets, History, Things to Do, Why Attend, Tips, Accessibility, Reviews, Conclusion
-- Services: Introduction, What It Includes, Who It's For, Pricing, Process, Benefits, Considerations, How to Book
-- Places: Introduction, Location, Key Attractions, Best Time to Visit, Getting There, Tips, Reviews
-
-**reasoning-based** (H2/H3):
-"Start answering: [restate the heading question]... then explain exact process based on available information.
-[List specific content items from competitor research to include]
-Please write correct accurate and context rich answer in paragraph format.
-Remember more text doesn't mean more context"
-
-**table-format** (H2/H3):
-"Create one table with [N] columns: [column 1 — specific data category], [column 2 — specific data], [column 3 — specific data].
-[Row expectations with specific entities/prices/data from research]
-Table outro: final words with context-rich terms."
-
-**exact-answer** (H3/H4):
-"[State the exact number/value/boolean]. Then source attribution and data breakdown.
-Include: [specific data points from competitor research]"
-
-**suggestive-answer** (H2/H3):
-"Start answering: [recommendation statement]... [conditions under which it applies].
-Include: [specific evidence items from competitor research]"
-
-### INSTRUCTION WRITING RULES (NON-NEGOTIABLE):
-1. EVERY structureInstructions MUST contain SPECIFIC content items drawn from the competitor data, SERP consensus, or entities provided in the user message — NOT generic placeholders like "[relevant items]"
-2. For list-definition: enumerate the ACTUAL list items the writer must cover (extracted from competitor research)
-3. For direct-answer: specify the Yes/No value AND include word/character limits (e.g., "under 40 words or 220 characters")
-4. For table-format: specify exact column names and what data goes in each row
-5. For purpose-summary (H1): list each contextual vector as a "+" prefixed line item
-6. Include format constraints: "paragraph format", "under 40 words", "under 220 characters" where appropriate
-7. Include quality guards: "remember more text doesn't mean more context" for reasoning sections, "DO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE" for list sections
-8. Reference the client/brand name where the heading mentions it${params.clientName ? ` (client: ${params.clientName})` : ""}
-9. Sub-questions within instructions are encouraged — e.g., after an explicit definition, add "Is [X] the same as [Y]? Direct Answer: Yes or No"
-
-STRUCTURE PATTERN TAXONOMY (assign one per heading):
-${Object.values(STRUCTURE_PATTERNS).map((p) => `- "${p.id}": ${p.description} [${p.wordCountRange[0]}-${p.wordCountRange[1]} words]`).join("\n")}
-
-PATTERN ASSIGNMENT RULES (follow strictly):
-For H1: ALWAYS assign "purpose-summary" pattern.
-For H2 that is a list question ("What are the most popular X?"): use "list-definition".
-For H2/H4 that is a yes/no question ("Is X...?", "Can you...?", "Does X...?"): use "direct-answer" with "Direct Answer: Yes/No... under 40 words or 220 characters".
-For H2 that is a "what should you" / "what do you need" / "how do you" question: use "exact-answer" with concise response instructions.
-For H2 starting with "What are the" + plural noun: use "list-definition" (NOT exact-answer).
-For H3 named entities that are children of a list-definition H2: use "entity-template" pattern with the full numbered template (Introduction, Key Features, etc.) — NOT "explicit-definition".
-For H2/H3 definitions (non-entity): use "explicit-definition".
-For why/how explanations: use "reasoning-based".
-For recommendations: use "suggestive-answer".
-For comparison tables: use "table-format" or "comparison".
-
-INTENT RULES (follow strictly):
-- Intent must describe the READER'S PURPOSE — what decision or understanding the section gives the reader.
-- NEVER start intent with "Define", "Provide", or "Explain".
-- CORRECT: "Help the reader decide which festivals to attend based on their interests"
-- CORRECT: "Give the reader a quick overview of all festivals so they can decide which to explore"
-- CORRECT: "Answer practical questions a first-time festival-goer in Bristol would have"
-- INCORRECT: "Define and describe Bristol International Balloon Fiesta"
-- INCORRECT: "Provide a list of festivals"
-
-For each heading provide:
-1. structurePattern: Pattern ID from taxonomy above (REQUIRED)
-2. structureInstructions: Sardar-style prescriptive writing directive (REQUIRED — must follow templates above with SPECIFIC content items, NOT generic descriptions)
-3. ruleCodes: Which writing rule codes apply (e.g., "FS", "PAA", "NER", "TF-IDF", "CO-OCC", "PERSPECTIVE")
-4. intent: One sentence on what this section accomplishes
-5. wordCountTarget: From the pattern's word count range
-6. targetQueries: Keywords mapped to this heading by semantic relevance (0-5 per heading)
-7. serpFeatures: SERP features this heading targets (use ABBREVIATIONS ONLY: "FS", "PAA", "KP", "LC" — never spell out "Featured Snippet")
-8. contentDesignPattern: "paragraph"|"table"|"comparison"|"list"|"visual"
-9. snippetTarget: boolean
-10. paaTarget: boolean
-11. contextualRationale: Object with 5 reasoning fields explaining WHY this heading exists (REQUIRED):
-    - levelJustification: Why this heading is at this level (H1/H2/H3/H4) and not another. Reference the parent heading if applicable.
-    - patternRationale: Why this structure pattern was chosen over alternatives. Reference the Sardar pattern rules and SERP evidence.
-    - readerIntent: What the reader is trying to accomplish when they reach this section. Describe their journey and decision point.
-    - evidenceBasis: The SERP data, competitor signals, keyword volumes, and PAA data that drove this heading's inclusion and format.
-    - hierarchyRole: How this heading connects to its parent, children, and siblings in the document tree. Specify parent heading text, number of children, and position in the sequence.
-
-PAGE-TYPE RULES (enforce for ${params.pageType} pages):
-${getRulesForPageType((params.pageType || "blog") as PageType).slice(0, 2000)}
-
-HARD RULES (violations will be rejected):
-- Assign the primary keyword to the H1
-- EVERY H1 and H2 heading MUST have at least 1 targetQuery. This is NON-NEGOTIABLE. Zero queries on any H1/H2 = rejection.
-- EVERY H3 heading SHOULD have at least 1 targetQuery unless there are truly no semantically relevant keywords left.
-- Distribute ALL provided keywords across headings. Every keyword must appear in at least one heading's targetQueries.
-- If there are more headings than keywords, derive natural-language queries from the heading text itself (e.g., heading "Types of Home Removal Services" → query "types of home removal services").
-- H1 structureInstructions MUST use "Purpose: Summarize the entire document..." format with "+" prefixed vector items — NOT a generic summary statement.
-- H1 structurePattern MUST be "purpose-summary" (not "paragraph")
-- structureInstructions that contain ONLY generic descriptions (e.g., "Provide a direct answer followed by contextual explanation" or "Define and describe X") will be REJECTED. They MUST contain specific content items, format directives, and quality guards.
-- EVERY structureInstructions MUST be at least 80 characters long with multi-line prescriptive content. One-sentence summaries are NEVER acceptable.
-- EVERY list-definition MUST enumerate at least 4 specific list items. EVERY table-format MUST specify column names and data expectations.
-
-EXAMPLE of a CORRECT heading output (study this format carefully):
-{
-  "level": 2, "text": "What to know before attending festivals in Bristol?",
-  "structurePattern": "list-definition",
-  "structureInstructions": "List Definition:\\nList Intro: when attending festivals in Bristol...\\nTicket pricing and early bird discounts\\nTransport and parking options (Temple Meads station, Park & Ride)\\nAccommodation availability during peak festival season\\nWeather preparation (Bristol's average summer rainfall)\\nAccessibility information and provisions\\nFood and drink vendors and dietary options\\nList Outro: summary or whole answer justification.\\nDO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE",
-  "ruleCodes": ["FS", "PAA", "NER"], "intent": "Provide practical checklist for festival-goers",
-  "wordCountTarget": 300,
-  "targetQueries": [{"query": "Bristol festival tips", "volume": 100, "intent": "informational"}],
-  "serpFeatures": ["FS"], "contentDesignPattern": "list", "snippetTarget": true, "paaTarget": false
-}
-
-EXAMPLE of an INCORRECT heading (DO NOT produce this):
-{
-  "structureInstructions": "Highlight what attendees should know before going to festivals."
-}
-This is REJECTED because it is a generic one-line description with no specific content items, no format directive, and no quality guard.
-
-Return JSON:
-{
-  "headings": [{
-    "level": number, "text": string,
-    "structurePattern": string, "structureInstructions": string,
-    "ruleCodes": string[], "intent": string, "wordCountTarget": number,
-    "targetQueries": [{ "query": string, "volume": number, "intent": string }],
-    "serpFeatures": string[],
-    "contentDesignPattern": string, "snippetTarget": boolean, "paaTarget": boolean,
-    "contextualRationale": {
-      "levelJustification": string,
-      "patternRationale": string,
-      "readerIntent": string,
-      "evidenceBasis": string,
-      "hierarchyRole": string
-    }
-  }]
-}`,
+Return JSON: { "annotations": [{ "index": number, "targetQueries": [{"query": string, "volume": number, "intent": string}], "intent": string, "serpFeatures": string[], "ruleCodes": string[], "contextualRationale": { "levelJustification": string, "patternRationale": string, "readerIntent": string, "evidenceBasis": string, "hierarchyRole": string } }] }`,
       },
-      // Few-shot example: show the LLM exactly what correct output looks like
       {
         role: "user",
-        content: `Topic: Domestic Home Removal Service in Bristol\nPage Type: service\nNiche: removal\nClient: Mo Transport\nLocation: Bristol\n\nHeadings to annotate:\n# Expert House Moving and Home Removal Services in Bristol by Mo Transport\n## What is a home moving?\n## What to know before moving home in Bristol?\n## What are the steps involved in moving to a new home?\n\nKeywords to map:\nhome removals (600/mo, commercial)\nhouse removal companies (450/mo, commercial)`,
-      },
-      {
-        role: "assistant",
-        content: JSON.stringify({
-          headings: [
-            {
-              level: 1,
-              text: "Expert House Moving and Home Removal Services in Bristol by Mo Transport",
-              structurePattern: "purpose-summary",
-              structureInstructions: "Purpose: Summarize the entire document (contextual vectors) in a representative manner using the same order.\nInstructions: implicit definition of Domestic home moving or removal in a (representative way)\n+ Things to know before moving in Bristol\n+ Steps involved in moving to a new home\n+ Is moving home in Bristol worth it\n+ Cost of moving 4 bedroom home within Bristol\n+ Is Mo Transport offer Domestic home removal services in Bristol (types of services also)\n+ Main benefits of hiring Mo Transport professional domestic home removal company\nThis is the summary of whole service page of \"Mo Transport\" so try use paragraph format",
-              ruleCodes: ["FS", "NER", "TF-IDF", "CO-OCC"],
-              intent: "Represent all contextual vectors of the document in heading order as a representative paragraph",
-              wordCountTarget: 250,
-              targetQueries: [{ query: "home removals", volume: 600, intent: "commercial" }],
-              serpFeatures: ["FS"],
-              contentDesignPattern: "paragraph",
-              snippetTarget: true,
-              paaTarget: false,
-              contextualRationale: {
-                levelJustification: "H1 is the single page-level title establishing the full topical scope — 'Expert House Moving' signals authority, 'Bristol' anchors locality, 'Mo Transport' brands the service. Exactly one H1 per page.",
-                patternRationale: "purpose-summary is mandatory for H1 in Sardar methodology. This pattern represents all contextual vectors in heading order as an overview paragraph, previewing every major section without diving deep into any one.",
-                readerIntent: "A user landing from 'home removals' (600/mo) wants to immediately understand what services Mo Transport offers and whether this page answers their specific moving question. The summary acts as a decision point — continue or bounce.",
-                evidenceBasis: "Primary keyword 'home removals' (600/mo, commercial). 'house removal companies' (450/mo). TF-IDF shows 'removal', 'Bristol', 'home', 'moving' are highest-weighted terms across the SERP. Featured Snippet opportunity for the primary query.",
-                hierarchyRole: "Root node of the document. No parent. Previews each H2 section as a '+' line item: definition, checklist, steps. Creates table-of-contents effect establishing the reading path.",
-              },
-            },
-            {
-              level: 2,
-              text: "What is a home moving?",
-              structurePattern: "explicit-definition",
-              structureInstructions: "Explicit Definition of What is a home moving?: use signifier, qualifier, and enriching context terms.\nThe answer should be context rich, accurate and clear.\n\nIs home removal the same as home moving?\n\nDirect Answer: Yes or No",
-              ruleCodes: ["FS", "PAA", "NER"],
-              intent: "Define home moving using signifier-qualifier format with context-rich terms",
-              wordCountTarget: 140,
-              targetQueries: [{ query: "house removal companies", volume: 450, intent: "commercial" }],
-              serpFeatures: ["FS", "PAA"],
-              contentDesignPattern: "paragraph",
-              snippetTarget: true,
-              paaTarget: true,
-              contextualRationale: {
-                levelJustification: "H2 because this is a standalone definitional section addressing a distinct user intent. It sits directly under H1 and requires its own visibility in the document outline for snippet eligibility.",
-                patternRationale: "explicit-definition chosen because the heading asks 'What is...?' — a definitional question. Sardar rules map definitional non-entity headings to explicit-definition with signifier-qualifier format. Not list-definition because it asks for a definition, not an enumerated list.",
-                readerIntent: "A reader searching 'house removal companies' (450/mo) may not distinguish moving from removal. This section clarifies terminology so they can confidently proceed knowing they're on the right page.",
-                evidenceBasis: "PAA: 'What is a home moving?' appears in People Also Ask. Mapped keyword 'house removal companies' (450/mo). Competitors define this term in their opening sections. Featured Snippet opportunity for the definition query.",
-                hierarchyRole: "First H2 child of the H1. No H3 children — leaf section. Connects upward to H1 summary and laterally to sibling H2s (checklist, steps). Sets foundational terminology before the practical sections.",
-              },
-            },
-            {
-              level: 2,
-              text: "What to know before moving home in Bristol?",
-              structurePattern: "list-definition",
-              structureInstructions: "List Definition:\nList Intro: when moving home in Bristol...\nCost of living\nNeighbourhood\nCulture\nTenancy end date\nCouncil tax\nPublic transport\nSafety\nList Outro: summary or whole answer justification.\n\nDO NOT EXPLAIN THAT MUCH JUST FOR COVERAGE PURPOSE",
-              ruleCodes: ["FS", "PAA", "NER", "CO-OCC"],
-              intent: "Provide a structured checklist of considerations before moving home in Bristol",
-              wordCountTarget: 300,
-              targetQueries: [{ query: "home removals", volume: 600, intent: "commercial" }],
-              serpFeatures: ["FS"],
-              contentDesignPattern: "list",
-              snippetTarget: true,
-              paaTarget: false,
-              contextualRationale: {
-                levelJustification: "H2 because this is a major practical section with a distinct user intent (preparation checklist). It needs H2 visibility for document outline and snippet eligibility. Not H3 because it's not subordinate to another content section.",
-                patternRationale: "list-definition chosen because the heading is a 'What to know...' question that expects an enumerated checklist. SERP consensus shows competitors present this as bulleted items. The list format targets the Featured Snippet opportunity for checklist-style queries.",
-                readerIntent: "A reader planning a move in Bristol wants a scannable checklist of considerations — cost of living, council tax, transport — before committing. The list format lets them quickly assess what applies to their situation.",
-                evidenceBasis: "Keyword 'home removals' (600/mo) contextually relevant. Competitor content covers these checklist items. Featured Snippet opportunity — current SERP shows list-format snippets for 'what to know before moving' queries.",
-                hierarchyRole: "Second H2 child of H1. No H3 children — leaf section. Sits between the definitional H2 and the process-steps H2. Connects upward to H1 summary where it appears as a '+' line item.",
-              },
-            },
-            {
-              level: 2,
-              text: "What are the steps involved in moving to a new home?",
-              structurePattern: "reasoning-based",
-              structureInstructions: "Start answering: these are seven steps...\nChange your address\nTransfer utilities\nDeclutter\nPack an essentials bag\nLabel all boxes\nDeep clean\nGet a security system installed\n\nPlease write correct accurate and context rich answer in paragraph format.\nRemember more text doesn't mean more context",
-              ruleCodes: ["FS", "PAA", "NER"],
-              intent: "Walk through the step-by-step process of moving to a new home",
-              wordCountTarget: 220,
-              targetQueries: [{ query: "house removal companies", volume: 450, intent: "commercial" }],
-              serpFeatures: ["FS"],
-              contentDesignPattern: "paragraph",
-              snippetTarget: true,
-              paaTarget: false,
-              contextualRationale: {
-                levelJustification: "H2 because this is a standalone process section covering the step-by-step moving procedure. It addresses a distinct intent (actionable steps) that doesn't belong under any other H2. H2 visibility ensures it appears in the document outline.",
-                patternRationale: "reasoning-based chosen because the heading asks 'What are the steps...?' — a process/how-to question requiring sequential explanation. Sardar rules use reasoning-based for how/why process questions. Written in paragraph format with embedded steps rather than a bare list, because 'more text doesn't mean more context'.",
-                readerIntent: "A reader ready to move wants a clear sequence of actions: change address, transfer utilities, declutter, pack essentials. They need confidence they haven't forgotten a critical step. The paragraph format with numbered items provides both structure and reassurance.",
-                evidenceBasis: "Keyword 'house removal companies' (450/mo) contextually relevant. Competitor content consistently covers 5-8 moving steps. Featured Snippet opportunity for step-by-step queries in this niche.",
-                hierarchyRole: "Third and final H2 child of H1. No H3 children — leaf section. Sits after the checklist H2, completing a natural progression: define → prepare → execute. Referenced in H1 summary as a '+' line item.",
-              },
-            },
-          ],
-        }),
-      },
-      // Real request
-      {
-        role: "user",
-        content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nNiche: ${params.niche}${params.clientName ? `\nClient: ${params.clientName}` : ""}${params.location ? `\nLocation: ${params.location}` : ""}\n\nHeadings to annotate:\n${rawHeadings.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\n${keywordList ? `Keywords to map:\n${keywordList}\n` : ""}${competitorItemsContext ? `\nCOMPETITOR CONTENT ITEMS (use these specific facts/entities in structureInstructions):\n${competitorItemsContext}\n` : ""}${competitorHeadingTopics ? `\nCOMPETITOR HEADING TOPICS (topics competitors cover — reference in instructions):\n${competitorHeadingTopics}\n` : ""}${designPatterns ? `\nCompetitor design patterns:\n${designPatterns}\n` : ""}${ruleContext ? `\nRule Application Examples:\n${ruleContext}` : ""}`,
+        content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\nNiche: ${params.niche}${params.clientName ? `\nClient: ${params.clientName}` : ""}${params.location ? `\nLocation: ${params.location}` : ""}\n\nHeadings:\n${headingListForLLM}\n\nKeywords to map:\n${keywordList}`,
       },
     ],
   });
 
   const content = response.choices[0]?.message?.content || "{}";
-  type Step9Heading = {
-    level: number;
-    text: string;
-    structureInstructions: string;
-    ruleCodes: string[];
-    intent: string;
-    wordCountTarget: number;
-    targetQueries: QueryEntry[];
-    serpFeatures: string[];
-    contentDesignPattern: string;
-    snippetTarget: boolean;
-    paaTarget: boolean;
+
+  type LLMAnnotation = {
+    index: number;
+    targetQueries?: QueryEntry[];
+    intent?: string;
+    serpFeatures?: string[];
+    ruleCodes?: string[];
     contextualRationale?: {
       levelJustification: string;
       patternRationale: string;
@@ -2230,144 +1926,86 @@ Return JSON:
       hierarchyRole: string;
     };
   };
-  let parsed: { headings?: Step9Heading[] };
+
+  let annotations: LLMAnnotation[] = [];
   try {
-    parsed = safeParseJSON(content) as { headings?: Step9Heading[] };
+    const parsed = safeParseJSON(content) as { annotations?: LLMAnnotation[]; headings?: LLMAnnotation[] };
+    // Accept either { annotations: [...] } or { headings: [...] } format
+    annotations = parsed.annotations || parsed.headings || [];
   } catch {
-    // Fallback: strip contextualRationale objects (most likely source of unescaped quotes)
-    // then re-parse. Headings will work without rationale — the UI handles missing rationale gracefully.
-    console.warn("[Step 9] JSON parse failed — retrying without contextualRationale");
-    const stripped = content.replace(/"contextualRationale"\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}\s*,?/g, "");
-    try {
-      parsed = safeParseJSON(stripped) as { headings?: Step9Heading[] };
-    } catch {
-      // Last resort: return empty — the pipeline will use rawHeadings as fallback
-      console.error("[Step 9] JSON parse failed even after stripping contextualRationale");
-      parsed = { headings: [] };
+    console.warn("[Step 9] LLM annotation JSON parse failed — using programmatic data only");
+    annotations = [];
+  }
+
+  // Build annotation lookup by index (or by text match as fallback)
+  const annotationByIndex = new Map<number, LLMAnnotation>();
+  for (const a of annotations) {
+    if (typeof a.index === "number") {
+      annotationByIndex.set(a.index, a);
     }
   }
-  let allAnnotated = parsed.headings || [];
-
-  // Continuation: if GPT-4o truncated (fewer headings than input), process remaining in follow-up calls
-  if (allAnnotated.length < rawHeadings.length) {
-    const processedTexts = new Set(allAnnotated.map((h) => h.text));
-    const remaining = rawHeadings.filter((h) => !processedTexts.has(h.text));
-    console.log(`[Step 9] Only ${allAnnotated.length}/${rawHeadings.length} headings annotated — continuing with ${remaining.length} remaining`);
-
-    // Process remaining in chunks of 10
-    for (let ci = 0; ci < remaining.length; ci += 10) {
-      const chunk = remaining.slice(ci, ci + 10);
-      const contResponse = await getOpenAI().chat.completions.create({
-        model: "gpt-4o",
-        temperature: 0.3,
-        max_tokens: 16384,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: `You are executing Step 9 of the Sardar brief methodology: Structure Instructions + Query Mapping.
-
-Continue annotating headings. Apply the SAME rules as the initial batch:
-- H3 named entities (children of a list H2) get entity-template: numbered template (1. Introduction, 2. Key Features, 3. Audience, 4. Dates/Location/Tickets, 5. History, 6. Things to Do, 7. Why Attend, 8. Tips, 9. Accessibility, 10. Reviews, 11. Conclusion) + "Following Template Write in a Paragraph Format"
-- H2 questions get list-definition or direct-answer
-- H4 yes/no questions get direct-answer: "Direct Answer: Yes/No... under 40 words or 220 characters"
-- Intent must describe READER PURPOSE, never "Define" or "Provide"
-
-- EVERY heading MUST include contextualRationale with all 5 fields: levelJustification, patternRationale, readerIntent, evidenceBasis, hierarchyRole
-
-Return JSON: { "headings": [{ level, text, structureInstructions, ruleCodes, intent, wordCountTarget, targetQueries: [{query, volume, intent}], serpFeatures, contentDesignPattern, snippetTarget, paaTarget, contextualRationale: { levelJustification, patternRationale, readerIntent, evidenceBasis, hierarchyRole } }] }`,
-          },
-          {
-            role: "user",
-            content: `Topic: ${params.topic}\nPage Type: ${params.pageType}\n\nHeadings to annotate:\n${chunk.map((h) => `${"#".repeat(h.level)} ${h.text}`).join("\n")}\n\n${keywordList ? `Keywords to map:\n${keywordList}\n` : ""}${competitorItemsContext ? `\nCOMPETITOR CONTENT ITEMS:\n${competitorItemsContext}\n` : ""}`,
-          },
-        ],
-      });
-      const contContent = contResponse.choices[0]?.message?.content || "{}";
-      let contParsed: { headings?: Step9Heading[] };
-      try {
-        contParsed = safeParseJSON(contContent) as { headings?: Step9Heading[] };
-      } catch {
-        console.warn("[Step 9] Continuation JSON parse failed — retrying without contextualRationale");
-        const stripped = contContent.replace(/"contextualRationale"\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}\s*,?/g, "");
-        try {
-          contParsed = safeParseJSON(stripped) as { headings?: Step9Heading[] };
-        } catch {
-          contParsed = { headings: [] };
-        }
-      }
-      if (contParsed.headings?.length) {
-        allAnnotated = [...allAnnotated, ...contParsed.headings];
-        console.log(`[Step 9] Continuation chunk added ${contParsed.headings.length} headings (total: ${allAnnotated.length})`);
-      }
+  // Fallback: if annotations have text field instead of index, match by text
+  if (annotationByIndex.size === 0 && annotations.length > 0) {
+    for (let i = 0; i < annotations.length && i < programmaticHeadings.length; i++) {
+      annotationByIndex.set(i, annotations[i]);
     }
   }
 
-  // Normalize spelled-out SERP features to abbreviations
+  // Normalize SERP feature abbreviations
   const serpFeatureAbbreviations: Record<string, string> = {
-    "Featured Snippet": "FS",
-    "featured snippet": "FS",
-    "People Also Ask": "PAA",
-    "people also ask": "PAA",
-    "Knowledge Panel": "KP",
-    "knowledge panel": "KP",
-    "Local Carousel": "LC",
-    "local carousel": "LC",
+    "Featured Snippet": "FS", "featured snippet": "FS",
+    "People Also Ask": "PAA", "people also ask": "PAA",
+    "Knowledge Panel": "KP", "knowledge panel": "KP",
+    "Local Carousel": "LC", "local carousel": "LC",
   };
-  for (const h of allAnnotated) {
-    const raw = h as Record<string, unknown>;
-    const sf = (raw.serpFeatures as string[]) || [];
-    raw.serpFeatures = sf.map((f) => serpFeatureAbbreviations[f] || f);
-    const rc = (raw.ruleCodes as string[]) || [];
-    raw.ruleCodes = rc.map((r) => serpFeatureAbbreviations[r] || r);
-  }
 
-  // Build a pool of unused keywords for backfill
+  // Build unused keyword pool for backfill
   const usedQueries = new Set<string>();
-  const parsedHeadings = allAnnotated.length > 0 ? allAnnotated : rawHeadings;
-  for (const h of parsedHeadings) {
-    const raw = h as Record<string, unknown>;
-    const tq = (raw.targetQueries as QueryEntry[]) || [];
-    for (const q of tq) usedQueries.add(q.query?.toLowerCase?.() || "");
+  for (const a of annotations) {
+    for (const q of a.targetQueries || []) {
+      usedQueries.add(q.query?.toLowerCase?.() || "");
+    }
   }
   const unusedKeywords = allKeywords.filter((k) => !usedQueries.has(k.keyword.toLowerCase()));
   let unusedIdx = 0;
 
-  return parsedHeadings.map((h, i) => {
-    const raw = h as Record<string, unknown>;
-    // Enforce purpose-summary for H1
-    const level = ((h.level as 1 | 2 | 3 | 4) || 2);
-    const structurePattern = level === 1
-      ? "purpose-summary"
-      : (raw.structurePattern as string) || "paragraph";
+  // ── PHASE C: Merge programmatic + LLM data ──
+  return programmaticHeadings.map((h, i) => {
+    const annotation = annotationByIndex.get(i);
 
-    // Backfill: ensure H1/H2 always have at least 1 query
-    let targetQueries = (raw.targetQueries as QueryEntry[]) || [];
-    if (targetQueries.length === 0 && level <= 2) {
-      // Try to assign an unused keyword
+    // targetQueries: from LLM, with backfill
+    let targetQueries = (annotation?.targetQueries || []).filter((q) => q.query);
+    if (targetQueries.length === 0 && h.level <= 2) {
       if (unusedIdx < unusedKeywords.length) {
         const kw = unusedKeywords[unusedIdx++];
         targetQueries = [{ query: kw.keyword, volume: kw.volume, intent: kw.intent || "informational" }];
       } else {
-        // Derive a natural query from the heading text
         targetQueries = [{ query: h.text.replace(/^#+\s*/, "").toLowerCase(), volume: 0, intent: "informational" }];
       }
     }
 
+    // Normalize SERP features
+    const rawSerpFeatures = annotation?.serpFeatures || [];
+    const serpFeatures = rawSerpFeatures.map((f) => serpFeatureAbbreviations[f] || f);
+    const rawRuleCodes = annotation?.ruleCodes || [];
+    const ruleCodes = rawRuleCodes.map((r) => serpFeatureAbbreviations[r] || r);
+
     return {
-      level,
+      level: h.level as 1 | 2 | 3 | 4,
       text: h.text,
-      structureInstructions: (raw.structureInstructions as string) || "",
+      // PROGRAMMATIC (deterministic)
+      structureInstructions: h.structureInstructions,
+      structurePattern: h.structurePattern,
+      wordCountTarget: h.wordCountTarget,
+      contentDesignPattern: h.contentDesignPattern,
+      snippetTarget: h.snippetTarget,
+      paaTarget: h.paaTarget,
+      // LLM (semantic)
       targetQueries,
-      serpFeatures: (raw.serpFeatures as string[]) || [],
-      ruleCodes: (raw.ruleCodes as string[]) || [],
-      intent: (raw.intent as string) || "",
-      wordCountTarget: raw.wordCountTarget as number | undefined,
-      structurePattern,
-      contentDesignPattern: (raw.contentDesignPattern as string) || structurePattern,
-      snippetTarget: raw.snippetTarget as boolean | undefined,
-      paaTarget: raw.paaTarget as boolean | undefined,
-      contextualRationale: raw.contextualRationale as EnhancedHeading["contextualRationale"],
+      serpFeatures,
+      ruleCodes,
+      intent: annotation?.intent || "",
+      contextualRationale: annotation?.contextualRationale,
     };
   });
 }
