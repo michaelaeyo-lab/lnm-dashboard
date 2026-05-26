@@ -88,18 +88,22 @@ export async function POST(request: Request) {
         );
 
         try {
+          let sseBuffer = "";
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
             controller.enqueue(value);
 
-            // Parse to capture final brief
-            const text = decoder.decode(value, { stream: true });
-            for (const line of text.split("\n")) {
+            // Parse to capture final brief — buffer incomplete lines
+            sseBuffer += decoder.decode(value, { stream: true });
+            const lines = sseBuffer.split("\n");
+            sseBuffer = lines.pop() ?? "";
+
+            for (const line of lines) {
               if (!line.startsWith("data: ")) continue;
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
+              const data = line.slice(6).trim();
+              if (!data || data === "[DONE]") continue;
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.done && parsed.brief) {
@@ -112,7 +116,7 @@ export async function POST(request: Request) {
                     },
                   });
                 }
-              } catch { /* skip */ }
+              } catch { /* skip incomplete chunk */ }
             }
           }
           controller.close();

@@ -118,6 +118,7 @@ export async function POST(request: Request) {
         const decoder = new TextDecoder();
 
         try {
+          let sseBuffer = "";
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -125,13 +126,15 @@ export async function POST(request: Request) {
             // Forward to client
             controller.enqueue(value);
 
-            // Parse SSE to capture content
-            const text = decoder.decode(value, { stream: true });
-            const lines = text.split("\n");
+            // Parse SSE to capture content — buffer incomplete lines
+            sseBuffer += decoder.decode(value, { stream: true });
+            const lines = sseBuffer.split("\n");
+            sseBuffer = lines.pop() ?? "";
+
             for (const line of lines) {
               if (!line.startsWith("data: ")) continue;
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
+              const data = line.slice(6).trim();
+              if (!data || data === "[DONE]") continue;
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.done && parsed.fullContent) {

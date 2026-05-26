@@ -167,16 +167,21 @@ export function ContentWriter() {
 
       const decoder = new TextDecoder();
       let accumulated = "";
+      let sseBuffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() ?? "";
+
         for (const line of lines) {
           if (line.startsWith("data: ")) {
+            const raw = line.slice(6).trim();
+            if (!raw || raw === "[DONE]") continue;
             try {
-              const parsed = JSON.parse(line.slice(6));
+              const parsed = JSON.parse(raw);
               if (parsed.token) {
                 accumulated += parsed.token;
                 setStreamContent(accumulated);
@@ -185,7 +190,7 @@ export function ContentWriter() {
                 setWriterState("done");
               }
             } catch {
-              /* skip malformed lines */
+              /* skip incomplete chunk */
             }
           }
         }
