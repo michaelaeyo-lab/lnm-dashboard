@@ -166,12 +166,16 @@ function SectionLabel({ children, trailing }: { children: React.ReactNode; trail
 }
 
 function SeoMetaBlock({ item }: { item: EnhancedHeading }) {
+  const queries = item.targetQueries || [];
+  const serp = item.serpFeatures || [];
+  const rules = item.ruleCodes || [];
+
   return (
     <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr]">
       <div className="card card-pad">
-        <div className="eyebrow mb-2">Target queries &middot; {item.targetQueries.length}</div>
+        <div className="eyebrow mb-2">Target queries &middot; {queries.length}</div>
         <div className="flex flex-col gap-1">
-          {item.targetQueries.map((q, i) => (
+          {queries.map((q, i) => (
             <div key={i} className="flex items-center gap-2 py-1.5 text-[12px]" style={{ borderBottom: "1px solid var(--border)" }}>
               <span className="flex-1 min-w-0 truncate" style={{ color: "var(--text-1)" }}>{q.query}</span>
               <Badge tone="default" mono={false}>{q.intent}</Badge>
@@ -184,18 +188,18 @@ function SeoMetaBlock({ item }: { item: EnhancedHeading }) {
       </div>
 
       <div className="card card-pad">
-        <div className="eyebrow mb-2">SERP features &middot; {item.serpFeatures.length}</div>
+        <div className="eyebrow mb-2">SERP features &middot; {serp.length}</div>
         <div className="flex flex-wrap gap-1.5">
-          {item.serpFeatures.map((f) => (
+          {serp.map((f) => (
             <Chip key={f} tone="mint">{f}</Chip>
           ))}
         </div>
       </div>
 
       <div className="card card-pad">
-        <div className="eyebrow mb-2">Rule codes &middot; {item.ruleCodes.length}</div>
+        <div className="eyebrow mb-2">Rule codes &middot; {rules.length}</div>
         <div className="flex flex-wrap gap-1.5">
-          {item.ruleCodes.map((c) => (
+          {rules.map((c) => (
             <Badge key={c} tone="cyan" mono title={RULE_NAMES[c] ?? c}>{c}</Badge>
           ))}
         </div>
@@ -218,7 +222,7 @@ function HierarchyRow({
   guides: number[];
 }) {
   const indent = (item.level - 1) * 28;
-  const primaryQ = item.targetQueries[0];
+  const primaryQ = (item.targetQueries || [])[0];
   const levelTheme = LEVEL_THEME[item.level as HeadingLevel];
   const patternTone = PATTERN_TONE[item.structurePattern || "paragraph"] || "default";
   const PatternIcon = PATTERN_ICON[item.structurePattern || "paragraph"] || FileText;
@@ -231,7 +235,7 @@ function HierarchyRow({
     setTimeout(() => setCopied(false), 1200);
   }, [item.structureInstructions]);
 
-  const totalVolume = item.targetQueries.reduce((s, q) => s + q.volume, 0);
+  const totalVolume = (item.targetQueries || []).reduce((s, q) => s + q.volume, 0);
 
   return (
     <div

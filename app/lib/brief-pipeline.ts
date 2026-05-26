@@ -2279,7 +2279,14 @@ ${headingList}`,
   if (parsed.correctedHeadings && parsed.score < 8) {
     correctedHeadings = parsed.correctedHeadings.map((corrected, i) => {
       const original = headings[i];
-      if (!original) return corrected as EnhancedHeading;
+      if (!original) return {
+        ...corrected,
+        targetQueries: corrected.targetQueries || [],
+        serpFeatures: corrected.serpFeatures || [],
+        ruleCodes: corrected.ruleCodes || [],
+        structureInstructions: corrected.structureInstructions || "",
+        intent: corrected.intent || "",
+      } as EnhancedHeading;
       return {
         ...original,
         level: (corrected.level as 1 | 2 | 3 | 4) || original.level,

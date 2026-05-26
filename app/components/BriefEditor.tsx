@@ -98,7 +98,7 @@ function HeadingRow({
   onSelect: () => void;
 }) {
   const indent = (heading.level - 1) * 16;
-  const totalVolume = heading.targetQueries.reduce((s, q) => s + q.volume, 0);
+  const totalVolume = (heading.targetQueries || []).reduce((s, q) => s + q.volume, 0);
 
   return (
     <button
@@ -190,11 +190,11 @@ function Inspector({
       </div>
 
       {/* Rule codes */}
-      {heading.ruleCodes.length > 0 && (
+      {(heading.ruleCodes || []).length > 0 && (
         <div>
           <span className="eyebrow">Rule Codes</span>
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {heading.ruleCodes.map((code) => (
+            {(heading.ruleCodes || []).map((code) => (
               <Badge key={code} tone="cyan" mono>
                 {code}
               </Badge>
@@ -204,11 +204,11 @@ function Inspector({
       )}
 
       {/* SERP features */}
-      {heading.serpFeatures.length > 0 && (
+      {(heading.serpFeatures || []).length > 0 && (
         <div>
           <span className="eyebrow">SERP Features</span>
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {heading.serpFeatures.map((f) => (
+            {(heading.serpFeatures || []).map((f) => (
               <Chip key={f} tone="mint">
                 {f}
               </Chip>
@@ -218,11 +218,11 @@ function Inspector({
       )}
 
       {/* Target queries */}
-      {heading.targetQueries.length > 0 && (
+      {(heading.targetQueries || []).length > 0 && (
         <div>
           <span className="eyebrow">Target Queries</span>
           <div className="space-y-1 mt-1.5">
-            {heading.targetQueries.map((q, i) => (
+            {(heading.targetQueries || []).map((q, i) => (
               <div key={i} className="flex items-center gap-2 text-[12px]">
                 <span className="flex-1 min-w-0 truncate" style={{ color: "var(--text-1)" }}>
                   {q.query}
@@ -766,7 +766,7 @@ export function BriefEditor({ brief: initialBrief }: { brief: BriefData }) {
     setRegenerating(false);
   }
 
-  const totalVolume = data.headings.reduce((sum, h) => sum + h.targetQueries.reduce((s, q) => s + q.volume, 0), 0);
+  const totalVolume = data.headings.reduce((sum, h) => sum + (h.targetQueries || []).reduce((s, q) => s + q.volume, 0), 0);
   const overallScore = data.qualityReport?.overallScore ?? 0;
 
   const visibleTabs = TAB_CONFIG.filter((tab) => {
