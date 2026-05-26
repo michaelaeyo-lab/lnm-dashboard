@@ -25,11 +25,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
   - Added 11 `build*Instruction()` template functions (one per pattern type)
   - Added `assignPatternsAndInstructions()` orchestrator in `structure-patterns.ts`
   - Replaced Step 9 in `brief-pipeline.ts`: programmatic phase runs first, LLM only handles query mapping/intent/contextualRationale
-- **KNOWN BUG:** After testing, structure instructions are STILL showing weak generic text ("Establish the main topic of the page"). The programmatic builder code exists but is NOT producing the expected output in the dashboard. Root cause investigation needed — possible issues:
-  1. The programmatic builder runs but its output is being overwritten somewhere downstream
-  2. The UI component displaying instructions may be reading from a different field
-  3. The old brief data is cached in the DB and showing stale results (need to generate a NEW brief)
-  4. The `assignPatternsAndInstructions()` function may not be getting called correctly at runtime
+- **BUG FIXED (2026-05-26):** Root cause was Step 11 (Heading Validation) overwriting programmatic `structureInstructions` with LLM-generated weak text.
+  - **Root cause:** When validation scored < 8, `stepHeadingValidation()` returned `correctedHeadings` with LLM-generated `structureInstructions` that replaced the programmatic Sardar-format instructions. The LLM prompt schema even asked for `structureInstructions` in the output.
+  - **Fix 1:** Removed `structureInstructions` from the Step 11 correction merge — LLM corrections now only modify `level`, `text`, and `intent`
+  - **Fix 2:** Updated Step 11 LLM prompt to not request `structureInstructions` in `correctedHeadings` output
+  - **Fix 3:** When corrections ARE applied, the pipeline re-runs `assignPatternsAndInstructions()` on the corrected headings so instructions match any changed heading text
+  - Files changed: `app/lib/brief-pipeline.ts` (lines ~919-965 and ~2252-2292)
 
 ### Previous Changes (2026-05-23)
 
